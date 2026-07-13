@@ -1,0 +1,7 @@
+# PDD JS bundles (too large to commit)
+raw/*.js
+
+# Captured data (contains personal info)
+data/captured*.json
+data/decrypted*.json
+data/page_debug.png

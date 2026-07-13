@@ -1,0 +1,7 @@
+# 不提交抓包、会话材料、临时解密结果或本地环境文件
+*.har
+**/data/payload.json
+**/decrypt_test.js
+.env
+.env.*
+*.local
