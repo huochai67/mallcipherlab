@@ -1,0 +1,17 @@
+{
+  "fixed_now": 1700000000123,
+  "argument": {
+    "alpha": 1,
+    "beta": "two"
+  },
+  "cps_result": {
+    "cps": "C"
+  },
+  "clt_result": "CLT",
+  "ms_result": {
+    "vm": "PYTHON",
+    "nested": {
+      "ok": true
+    }
+  }
+}

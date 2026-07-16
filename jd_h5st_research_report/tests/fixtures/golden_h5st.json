@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "description": "Synthetic offline golden fixture for the pinned official h5st 5.3 VM snapshot",
+  "source_sha256": "78ff71158c7dc6284a0ab381370be33bc8fb8fd7f25571745330848eb766c331",
+  "runtime": "quickjs-1.19.4",
+  "app_id": "586ae",
+  "params": {
+    "functionId": "unionSearchGoods",
+    "appid": "unionpc",
+    "body": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"
+  },
+  "options": {
+    "now_ms": 1784168130123,
+    "seed": 305419896,
+    "timezone_offset_minutes": 480
+  },
+  "expected": {
+    "functionId": "unionSearchGoods",
+    "appid": "unionpc",
+    "body": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e",
+    "_stk": "appid,body,functionId",
+    "_ste": 1,
+    "h5st": "20260716101535123;yzzaj1ibb2pp2pp8;586ae;tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe;04afdd55323fef01294630ece1e61a7983b63c65b99151f9f9a4ac036bff5b7b;5.3;1784168130123;of7ruCLjzrkP5rkP5jFTCmIRKCENyipjxjpPFipjLDrg4jYf7fYfzTYf3L4e6rJdJbEjLrJp-jJW3WHWzCVaqiGWJrJdJbYf2iFjLrJp-LojxjJQIeFjLrJp-jJjLDIj7SnQEiVS0ipjLDrgJrIjLDIj3XETJrpjh7Jj3z5f9XIOMWlQCS1U2LFjLDIj1ipjLDrgJT4fyr2fdKIayOIjLDIj_ulS9mFPJrpjh7Jj5fIQCOGjLDIjFqEjLrJp-3kjLD7fLDIj6nYOJipjLrpjh7pe6rJdJrYf2iFjLrpjLDrgz3pjxjJf6XETJrpjLrJp-j5QfOUbzf4edGYbzjpjxjZQ8aFQKiEjLrpjLDrg6rJdJLYOJipjLrpjh7ZfLDIj0XETJrpjLrJp-nYgLDIj1XETJrpjLrJp-rojxjZe2iFjLrpjLDrg7rJdJbYOJipjLrpjh7Zf_rJdJfYOJipjLrpjh7Jj3zZf9rIjLDIj6XETJrpjLrJp-bIeLDIjAOEjLrpjLDrg63pjxj5P-ipjLrpjh7pfLDIj-ipjLrpjh7pfLDIjHOEjLrpjLD7NLDIjHyVS3KUSJrpjh7ZMwqJdJrkPJrpjh7Jj3ToNL-oe1zVRUq5d7zpf6rpWdq5P0ulS9G1WJrJdJnVO4ipjLD7N;eb83cbb6b359b4b0d821a17158a7254a4530c2547ced7e2140ded6d53bc8b6ab;of7rHGHQ8GlOIyVOF6ZNHuFT-bVR7qUT"
+  },
+  "expected_h5st_sha256": "4248769c0b6766b83447efbd5175960c62e57de2966ffc9d8c1efe6eb64991f8",
+  "part_lengths": [
+    17,
+    16,
+    5,
+    92,
+    64,
+    3,
+    13,
+    660,
+    64,
+    32
+  ]
+}

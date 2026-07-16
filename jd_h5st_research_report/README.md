@@ -1,376 +1,195 @@
-# 京东 h5st 参数逆向分析报告
+# 京东 h5st 5.3 VM 研究与离线运行
 
-> 版本: h5st v5.3 | 安全JS: v3_0.1.4 | 日期: 2026-07-07
+> 验收日期：2026-07-16<br>
+> 样本：`js_security_v3_0.1.4.js` 的 2026-05-27 官方历史构建<br>
+> 资产身份以 SHA256 为准；URL 中的 `0.1.4` 版本号不足以区分多态构建。
 
----
+## 1. 当前状态
 
-## 目录
+方案 A 已拆成三个可独立验收的层次：
 
-1. [h5st 结构分析](#1-h5st-结构分析)
-2. [h5st 创建流程](#2-h5st-创建流程)
-3. [各步骤细节](#3-各步骤细节)
-4. [可行的逆向方案](#4-可行的逆向方案)
-5. [当前研究现状](#5-当前研究现状)
-6. [附录](#6-附录)
+| 层次 | 状态 | 实现与边界 |
+|---|---|---|
+| A1：构建绑定与静态移植 | 完成 | 词法安全提取 374 项字符串、5209 个整数编码单元、34 个 dispatcher、1124 个 case handler；恢复全部 CFG，共 3841 条可达指令。 |
+| A2：完整离线签名运行 | 完成 | `h5st_runtime.py` 通过 Python `quickjs==1.19.4` 扩展在进程内执行固定官方 VM；无需 Node 子进程，浏览器宿主由确定性 shim 提供，全流程零网络。 |
+| A3：原生 Python dispatcher | 完成首个执行切片 | `h5st_vm.py` 原生执行最终入口 5134 的真实 75-cell 尾段和全部 33 个 handler；`_$cps/_$rds/_$clt/_$ms` 由宿主注入。其余 dispatcher 由 A2 的嵌入式官方 VM 执行。 |
 
----
+因此，项目已经具备可调用的 Python 离线签名 API、构建错配检查、完整静态反编译覆盖、原生尾部 VM 和固定回归 fixture。Node 工具仅作为 V8 差分 oracle。
 
-## 1. h5st 结构分析
+详细过程见 [反编译与解密过程](DECOMPILATION_AND_DECRYPTION.md)。
 
-h5st 是一个由 **分号(`;`)分隔的10段字符串**，每段携带不同的安全信息。
+## 2. 样本身份与构建绑定
 
-### 1.1 完整示例
+| 资产 | 用途 | 大小 / 数量 | SHA256 |
+|---|---|---:|---|
+| 官方历史快照 `js_security_v3_0.1.4_20260527205706.js` | 逐字 golden 与完整运行 | 236,108 B | `78ff71158c7dc6284a0ab381370be33bc8fb8fd7f25571745330848eb766c331` |
+| 可读样本 `js_security_v3_0.1.4_cc4cf49.js` | dispatcher 提取、调用链阅读 | 460,392 B | `bbe0f7569bc1823dcc90d7f41d9e28e7f5cc839704afb6ea1576a297ce1a3c78` |
+| `_1hbrh` 解码表 | 字符串操作数 | 374 项 | canonical JSON `6cc5c66c97b2b6e48be64f46abfd0528a2c5dfbf735fb72fb56e1e3676f8da1c` |
+| `_2xnrh` | VM 整数编码单元 | 5209 项 | canonical JSON `38e5fef28ac880e1d3b6203f354c5ff26d625b8f90737eb25895201fa83633d0` |
+| dispatcher 元数据 | 入口、handler、跳转与字符串基址 | 34 个入口 / 1124 handlers | 由 manifest 绑定 |
 
-```
-<TIMESTAMP_YMD>;<FINGERPRINT>;<SHORT_CODE>;<TOKEN>;<HASH_INPUT>;5.3;<TIMESTAMP_MS>;<ENCRYPTED_PAYLOAD>;<PAYLOAD_HASH>;<SIGNATURE>
-```
+来源：
 
-### 1.2 分段定义
+- [官方 CDN 的 Wayback 快照](https://web.archive.org/web/20260527205706id_/https://storage.360buyimg.com/webcontainer/js_security_v3_0.1.4.js)
+- [可读样本仓库与固定 commit](https://github.com/kb-ywl/h5st-/commit/cc4cf495fe1047f31ac621d5bb9345853b403f98)
 
-| # | 名称 | 示例值 | 长度 | 含义 | 是否动态 |
-|---|------|--------|------|------|---------|
-| ① | `timestamp_ymd` | `<TIMESTAMP_YMD>` | 17位 | `YYYYMMDDHHmmssSSS` 格式时间戳 | ✅ 每次变化 |
-| ② | `fingerprint` | `<FINGERPRINT>` | 16-17位 | 设备环境指纹(含canvas,webgl等) | ❌ 环境固定则固定 |
-| ③ | `short_code` | `<SHORT_CODE>` | 5位 | 环境相关短码 | ❌ 环境固定则固定 |
-| ④ | `token` | `<TOKEN>` | ~110位 | 加密token(含magic+version等) | ✅ 每次变化 |
-| ⑤ | `hash_input` | `<HASH_INPUT>` | 64hex | SHA256(①~④签名) | ✅ 随输入变化 |
-| ⑥ | `version` | `5.3` | 3位 | h5st版本号 | ❌ 固定值 |
-| ⑦ | `timestamp_ms` | `<TIMESTAMP_MS>` | 13位 | Unix毫秒时间戳 | ✅ 每次变化 |
-| ⑧ | `payload` | `<ENCRYPTED_PAYLOAD>` | ~416位 | 加密载荷(请求参数加密) | ✅ 随输入变化 |
-| ⑨ | `hash_payload` | `<PAYLOAD_HASH>` | 64hex | SHA256(⑧校验) | ✅ 随载荷变化 |
-| ⑩ | `signature` | `<SIGNATURE>` | ~80位 | 最终签名(HmacSHA256) | ❌ 环境固定则固定 |
+两份源码的字符串表、字节码和 dispatcher 结构逐项相同。可读样本与官方快照在固定环境下生成的 h5st 仅第 8 段有一个字符差异，所以运行金标固定使用官方历史快照。
 
-### 1.3 各字段来源
+2026-07-16 采集的同名 CDN URL 已是另一构建：SHA256 `3a067e38c463d75c3e6aae32fac9049d01e9e245966a5e09d13ad675c768a23f`、数组 5133 项、最终入口 4998。`h5st_vm_manifest.json` 与提取器会在混用构建时立即报错。
 
-```
-① timestamp_ymd = BeijingTime.now().format("yyyyMMddHHmmssSSS")
-② fingerprint   = _$Vz() → 采集 navigator/screen/canvas/WebGL/fonts 等环境数据 → MD5
-③ short_code    = h5st生成器内置的环境相关值
-④ token         = "tk" + magic + version + "w" + platform + "41" + expires + "l" + producer + 加密数据
-⑤ hash_input    = SHA256(拼接①~④的特定字段)
-⑥ version       = "5.3" (硬编码)
-⑦ timestamp_ms  = Date.now()
-⑧ payload       = AES-CBC加密(请求参数 + 环境数据)
-⑨ hash_payload  = SHA256(⑧)
-⑩ signature     = HmacSHA256(环境因子, 数据密钥)
+## 3. 快速运行
+
+### 3.1 安装 Python 运行时
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r jd_h5st_research_report\requirements.txt
 ```
 
----
+### 3.2 生成固定离线 h5st
 
-## 2. h5st 创建流程
-
-### 2.1 整体流程图
-
-```
-浏览器/爬虫 发起请求
-       │
-       ▼
-┌─────────────────────────────┐
-│ 1. 环境指纹采集 (_$Vz)       │ ← navigator, screen, canvas, WebGL...
-│    → 生成 fingerprint(Part②)  │
-└─────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│ 2. Token 生成                │ ← 基于指纹 + 时间戳 + 内置密钥
-│    → 生成 token(Part④)       │
-└─────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│ 3. 构建签名输入串            │ ← 取请求参数 + _stk 排序
-│    → 生成 hash_input(Part⑤)  │
-└─────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│ 4. 加密载荷                  │ ← AES-CBC加密请求参数+环境数据
-│    → 生成 payload(Part⑧)     │
-└─────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│ 5. 双重校验                  │
-│    → SHA256(payload) Part⑨  │
-│    → HmacSHA256(全部) Part⑩ │
-└─────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────┐
-│ 6. 拼接 h5st                 │
-│    ①;②;③;④;⑤;⑥;⑦;⑧;⑨;⑩    │
-└─────────────────────────────┘
+```powershell
+.\.venv\Scripts\python jd_h5st_research_report\utils\h5st_runtime.py `
+  --app-id 586ae `
+  --params '{"functionId":"unionSearchGoods","appid":"unionpc","body":"4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"}' `
+  --now-ms 1784168130123 `
+  --seed 305419896 `
+  --pretty
 ```
 
-### 2.2 请求级联关系
+固定时钟、PRNG、UTC+8 视图和浏览器属性来自 `browser_shim.js`。网络对象是本地桩，延迟远程算法分支保持休眠。
 
-基于已移除的敏感抓包整理出的请求链：
-
-```
-Step 1: getPageConfig (risk_h5_info)
-        → 获取风控配置、CDN URL、策略参数
-        ↓
-Step 2: jsTk.do (jra.jd.com)
-        → 获取 token/eid (如 "jdd03RTQ2FHW3X2BHWWP23P...")
-        ↓
-Step 3: getCustomCtrl (risk_h5_info)
-        → 获取自定义控制参数
-        ↓
-Step 4: 正式API请求 (携带 h5st)
-        → h5st由 ParamsSign.sign() 生成
-```
-
----
-
-## 3. 各步骤细节
-
-### 3.1 环境指纹采集 (Part ②)
-
-指纹采集在 `_$Vz()` 函数中实现，采集项包括：
-
-| 采集项 | JS 代码 | 用途 |
-|--------|---------|------|
-| userAgent | `navigator.userAgent` | 浏览器标识 |
-| platform | `navigator.platform` | 操作系统 |
-| language | `navigator.language` | 语言 |
-| cookies | `navigator.cookieEnabled` | Cookie支持 |
-| timezone | `Intl.DateTimeFormat().resolvedOptions().timeZone` | 时区 |
-| canvas | `canvas.toDataURL()` → MD5 | Canvas指纹 |
-| webgl | WebGL getParameter 多项 | WebGL指纹 |
-| screen | `screen.width/height/colorDepth` | 屏幕参数 |
-| hardware | `navigator.hardwareConcurrency` | CPU核心数 |
-| deviceMemory | `navigator.deviceMemory` | 内存 |
-| fonts | 系统字体列表 | 字体指纹 |
-| plugins | `navigator.plugins` | 插件列表 |
-| audio | AudioContext 指纹 | 音频指纹 |
-
-所有采集项经 MD5 哈希后作为指纹值。
-
-### 3.2 Token 生成 (Part ④)
-
-Token 生成在 `_$gdk()` VM 函数中实现，格式为：
-
-```
-tk{magic}{version}w{platform}41{expires}l{producer}{加密数据}
-```
-
-各字段含义：
-
-| 字段 | 示例 | 来源 |
-|------|------|------|
-| `tk` | `tk` | 固定前缀 |
-| `magic` | `06` | 内置魔数 |
-| `version` | `w` | 算法版本标识 |
-| `w` | `w` | 固定分隔符 |
-| `platform` | `73` | 平台编码 |
-| `41` | `41` | 固定分隔符 |
-| `expires` | `d5` | 过期时间 |
-| `l` | `l` | 固定分隔符 |
-| `producer` | `f` | 生产者标识 |
-| 加密数据 | `UL4eUm...` | AES加密的环境时间数据 |
-
-### 3.3 签名算法 (Part ⑤)
-
-```
-_stk = "appid,body,client,clientVersion,functionId,keyword,loginType,t,uuid"
-       ▲ _stk 定义哪些参数参与签名
-
-待签数据 = 按 _stk 字段顺序取 value 拼接
-sign = SHA256(key + "&" + 待签数据)
-```
-
-### 3.4 加密载荷 (Part ⑧)
-
-载荷由以下步骤生成：
-
-1. 收集环境数据 + 请求参数
-2. AES-CBC 加密（密钥从 VM 中提取）
-3. 结果编码为自定义字符集（`pjbMhjZ...` 格式）
-
-加密载荷中 `JrJd`、`LDIj`、`Jrpj` 等重复模式表明其使用了**替换密码**层。
-
-### 3.5 最终签名 (Part ⑩)
-
-由 HmacSHA256 算法生成，密钥来源于：
-- 设备指纹 (Part ②)
-- Token 中的种子密钥
-- 内部密钥 `DongG`
-
----
-
-## 4. 可行的逆向方案
-
-### 方案 A：VM 字节码移植 (当前采用)
-
-**原理**：`js_security_v3_0.1.4.js` 使用栈式 VM 解释器执行安全算法。提取 VM 数据后用 Python 重写解释器。
-
-**优点**：纯 Python、无需 Node.js
-**缺点**：
-- ~5000 条字节码指令，移植工作量大
-- VM 有约 30 种操作码
-- 需要模拟 JavaScript 函数调用语义
-- 估算代码量 2000-3000 行
-
-**现状**：已提取了字符串表 (`_1hbrh`) 和字节码 (`_2xnrh`)，但完整移植工作量过大。
-
-### 方案 B：Node.js 子进程调用 (当前工作方案)
-
-**原理**：在 Node.js 中 mock 浏览器环境，加载安全 JS，直接调用 `ParamsSign.signSync()`。
-
-**优点**：
-- ✅ **已验证可用**（返回 200/code=0）
-- 实现简单，代码不到 100 行
-- 跟随官方更新快
-
-**缺点**：
-- 依赖 Node.js 运行时
-- 每次调用启动进程有 200-400ms 开销
-- 环境 mock 不完整，指纹与真实浏览器不同
-
-**核心代码**：
-
-```javascript
-// Node.js mock 环境 + 加载安全 JS
-require('./sha256.js');
-require('./js_security_v3_0.1.4.js');
-
-const signer = new ParamsSign({ appId });
-const result = signer.signSync(params);
-console.log(result.h5st);
-```
-
-### 方案 C：Playwright 浏览器签名 (推荐生产)
-
-**原理**：用 Python Playwright 控制真实 Chromium，在浏览器中执行签名。
-
-**优点**：
-- ✅ 真实浏览器指纹（canvas、WebGL、Audio 齐全）
-- ✅ Part ⑩ 动态变化，不易被检测
-- ✅ Cookie 自动管理
-- ✅ 无法被 Node.js 检测
-- ✅ 自动加载最新安全 JS
-
-**缺点**：
-- 需要安装 Chromium（~150MB）
-- 内存占用较高
-
-**示例代码**：
+### 3.3 Python API
 
 ```python
-from playwright.sync_api import sync_playwright
+from h5st_runtime import generate_h5st
 
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)
-    page = browser.new_page()
-    page.goto('https://search.jd.com/Search?keyword=test')
-    page.wait_for_function('typeof ParamsSign === "function"')
-    
-    result = page.evaluate('''({appId, params}) => {
-        const s = new ParamsSign({ appId });
-        return s.signSync(params);
-    }''', {'appId': 'search-pc-java', 'params': {...}})
-    
-    print(result['h5st'])
+result = generate_h5st(
+    "586ae",
+    {
+        "functionId": "unionSearchGoods",
+        "appid": "unionpc",
+        "body": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e",
+    },
+    now_ms=1784168130123,
+    seed=305419896,
+)
+assert len(result["h5st"].split(";")) == 10
 ```
 
-### 方案 D：jdh5st 项目的 cactus 接口方案
+从仓库外导入时，把 `jd_h5st_research_report/utils` 加到 `PYTHONPATH`，或直接复用 `h5st_client.py`。
 
-**原理**：调用 `cactus.jd.com/request_algo` 获取算法函数，再通过 `execjs` 执行。
+## 4. 提取、反编译与原生入口
 
-**优点**：算法由服务端动态下发
-**缺点**：适用于旧版 h5st 4.4，5.3 版本兼容性不明
+重新提取固定构建：
 
-### 方案对比
-
-| 方案 | 实现难度 | 稳定性 | 防检测 | 性能 | 维护成本 |
-|------|---------|--------|-------|------|---------|
-| A. VM移植 | ★★★★★ | ★★★★ | ★★★★★ | ★★★★★ | ★★★★★ |
-| B. Node子进程 | ★★ | ★★★★ | ★★ | ★★★ | ★★★ |
-| **C. Playwright** | **★★** | **★★★★★** | **★★★★★** | **★★★** | **★★** |
-| D. cactus接口 | ★★★ | ★★★ | ★★★ | ★★★★ | ★★★★ |
-
----
-
-## 5. 当前研究现状
-
-### 5.1 已知研究项目
-
-| 项目 | 版本 | 方法 | 状态 |
-|------|------|------|------|
-| 本报告 (v0.1.4) | h5st 5.3 | VM字节码提取 + Node.js调用 | ✅ 通过验证 |
-| jdh5st (GitHub) | h5st 4.4→5.3 | Node.js mock + Puppeteer回退 | ✅ 通过验证 |
-| js_security_v3_main_0.1.8.js | h5st 5.3 | ParamsSignMain (同VM方案) | 已分析 |
-
-### 5.2 版本演进
-
-```
-v4.4 (JS v0.1.7/0.1.8)
-  ├── 8段h5st
-  ├── 算法由 cactus.jd.com 下发
-  └── 签名: MD5(key + data + key)
-  
-v5.3 (JS v0.1.4) ← 当前版本
-  ├── 10段h5st ← 增加双重校验
-  ├── VM字节码替代动态下发
-  ├── 签名: SHA256 + HmacSHA256
-  └── AES加密载荷
+```powershell
+python jd_h5st_research_report\utils\vm_bundle.py `
+  jd_h5st_research_report\archives\js_security_v3_0.1.4_20260527205706.js `
+  --output-dir "$env:TEMP\jd-vm-bundle"
 ```
 
-### 5.3 关键文件
+验证 34 个 CFG：
 
-| 文件 | 大小 | 版本 | 说明 |
-|------|------|------|------|
-| `js_security_v3_0.1.4.js` | 236KB | 0.1.4 | ParamsSign 类，含 VM 字节码 |
-| `js_security_v3_0.1.8.js` | 65KB | 0.1.8 | ParamsSign 类（精简版） |
-| `js_security_v3_main_0.1.8.js` | 237KB | 0.1.8 | ParamsSignMain 类，含 VM 字节码 |
-| `sha256.js` | 3KB | - | SHA256 浏览器 polyfill |
-| `pc-tk.js` | 50KB | - | Token/EID 获取 |
-| `pc-core-disposal.js` | 49KB | 2.2.0 | 风控 SDK 加载器 |
-
-### 5.4 已知反爬检测指标
-
-1. **h5st Part ⑩ 一致性** — 同一会话中 Part ⑩ 固定不变，可被用于关联请求
-2. **指纹缺失** — canvas/WebGL 指纹缺失或为默认值
-3. **时间戳合理性** — h5st 时间戳与实际 HTTP 请求时间偏差
-4. **Token 格式** — tk06w 与 tk03w 前缀差异（不同环境版本）
-5. **请求间隔** — 无人类操作特征的固定间隔
-6. **Cookie 绑定** — h5st 与 Cookie 中信息的关联校验
-
----
-
-## 6. 附录
-
-### 6.1 文件清单
-
+```powershell
+python jd_h5st_research_report\utils\vm_decompiler.py --validate-all
 ```
-h5st_research_report/
-├── README.md                    ← 本报告
+
+查看最终入口及 handler：
+
+```powershell
+python jd_h5st_research_report\utils\vm_decompiler.py 5134 --handlers
+python jd_h5st_research_report\utils\h5st_vm.py
+```
+
+34 个 dispatcher 入口为：
+
+```text
+0, 131, 181, 199, 381, 433, 473, 741, 902, 1068, 1304,
+1447, 1553, 1720, 1909, 2161, 2189, 2199, 2209, 2422,
+2428, 2574, 2647, 4004, 4180, 4312, 4367, 4476, 4548,
+4560, 4719, 5037, 5042, 5134
+```
+
+各 dispatcher 的 opcode 数字经过独立随机化；相同数字在不同入口里可表达不同语义。反编译器按每个函数自身的 `switch` handler 解码，而不是套用一张全局 opcode 表。
+
+## 5. h5st 十段：fixture 证据
+
+QuickJS golden fixture 位于 `tests/fixtures/golden_h5st.json`。固定结果总长 975，十段长度如下：
+
+```text
+17, 16, 5, 92, 64, 3, 13, 660, 64, 32
+```
+
+| 段 | 固定 fixture 中的可观测含义 | 证据等级 |
+|---:|---|---|
+| 1 | UTC+8 格式化时间 `YYYYMMDDHHmmssSSS` | 已测试 |
+| 2 | 本地环境指纹 | 已测试 |
+| 3 | 短应用标识，本 fixture 为 `586ae` | 已测试 |
+| 4 | `tk06w...` 本地 token | 已测试 |
+| 5 | 64 位十六进制中间签名值 | 已测试其形态与确定性 |
+| 6 | 版本 `5.3` | 已测试 |
+| 7 | 13 位毫秒时间戳 | 已测试 |
+| 8 | 请求与环境扩展数据的编码载荷 | 已测试其输入敏感性与构建差分 |
+| 9 | 64 位十六进制校验值 | 已测试其形态与确定性 |
+| 10 | 32 字符最终尾签 | 已测试其形态与确定性 |
+
+旧文档曾把第 8 段直接标为 AES-CBC、第 9 段标为 `SHA256(payload)`、第 10 段标为约 80 位 HMAC。这些描述缺少本构建的逐步数据流证据，现以实际 fixture 与反编译结果为准。项目中的“解密”主要指字符串表解码、控制流还原和编码载荷的数据流追踪；第 8 段的逆变换需要继续绑定中间态 fixture 才能命名每一层算法。
+
+同一官方源码、同一仓库 shim 在 V8 与 QuickJS 下，十段中的 1–7、9–10 完全一致，第 8 段等长且仅一个字符不同；QuickJS fixture 是 Python API 的逐字金标，Node oracle 测试显式记录该引擎差异。
+
+## 6. 自动化验收
+
+```powershell
+.\.venv\Scripts\python -m unittest discover `
+  -s jd_h5st_research_report\tests `
+  -p "test_*.py" `
+  -v
+```
+
+当前结果：`Ran 12 tests ... OK`。覆盖内容：
+
+- 官方快照与可读样本提取结果逐项相同；
+- 未登记源码哈希快速拒绝；
+- 字符串表、字节码、dispatcher 数量与 manifest 一致；
+- 全 34 个 dispatcher 的 CFG 可达性验证；
+- 原生 Python entry 5134 与官方 JS 差分一致；
+- Python QuickJS 完整十段 golden fixture；
+- 固定时间与固定 PRNG 的逐字确定性；
+- Node/V8 与 Python/QuickJS 的已知单字符差异断言。
+
+## 7. 文件布局
+
+```text
+jd_h5st_research_report/
+├── README.md
+├── DECOMPILATION_AND_DECRYPTION.md
+├── requirements.txt
 ├── archives/
-│   ├── h5st_string_table.json   ← _1hbrh 字符串表
-│   ├── h5st_bytecode.json       ← _2xnrh VM 字节码
-│   ├── js_security_v3_0.1.4.js  ← ParamsSign 安全JS
-│   └── sha256.js                ← SHA256 库
+│   ├── js_security_v3_0.1.4_20260527205706.js
+│   ├── js_security_v3_0.1.4_cc4cf49.js
+│   ├── h5st_vm_manifest.json
+│   ├── h5st_vm_dispatchers.json
+│   ├── h5st_string_table.json
+│   └── h5st_bytecode.json
+├── tests/
+│   ├── fixtures/golden_h5st.json
+│   ├── test_runtime.py
+│   └── test_vm.py
 └── utils/
-    ├── h5st_generator.js         ← Node.js h5st 生成器
-    ├── h5st_client.py            ← Python 封装
-    ├── decode_strings.py         ← 字符串解码工具
-    └── extract_vm_data.py        ← VM 数据提取工具
+    ├── browser_shim.js
+    ├── h5st_runtime.py
+    ├── h5st_client.py
+    ├── h5st_generator.js
+    ├── vm_bundle.py
+    ├── vm_decompiler.py
+    └── h5st_vm.py
 ```
 
-### 6.2 引用资源
+## 8. 维护规则
 
-- 京东搜索页: `https://search.jd.com/Search`
-- 风控 API: `https://api.m.jd.com/api`
-- Token API: `https://jra.jd.com/jsTk.do`
-- 安全JS: `https://storage.360buyimg.com/webcontainer/js_security_v3_0.1.4.js`
-- 算法接口: `https://cactus.jd.com/request_algo`
-- GitHub 项目: `jdh5st` (h5st 4.4/5.3 研究)
-
-### 6.3 免责声明
-
-本报告仅供学习研究使用。请遵守相关法律法规及京东用户协议。
-
----
-
-*报告生成日期: 2026-07-07*
-
+1. 用源码 SHA256 标识构建，不以 URL 或 `0.1.4` 文本替代。
+2. 字符串表、整数流和 dispatcher handler 必须从同一源码一次性提取。
+3. 每次构建变化先生成新 manifest 和 fixture，再比较入口、字符串基址和十段输出。
+4. 当前仓库未包含 HAR、Cookie、账号凭据或会话 token；fixture 为合成本地输入。
+5. 结论统一标记为“已测试 / 静态推断 / 待绑定中间态”三类证据。

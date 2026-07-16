@@ -1,74 +1,108 @@
 #!/usr/bin/env node
 /**
- * h5st Generator - Standalone CLI
- * Usage: 
- *   node h5st_generator.js <appId> '<JSON params>' [token]
- *   node h5st_generator.js --stdin   (read JSON from stdin)
+ * Node differential oracle for the pinned official CDN snapshot.
+ *
+ * The production-facing Python entry is h5st_runtime.py. This small wrapper loads
+ * the exact same source and browser shim so tests can compare QuickJS and V8.
  */
 
-global.navigator = {
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-    language: 'zh-CN', languages: ['zh-CN', 'zh'], platform: 'Win32',
-    hardwareConcurrency: 8, deviceMemory: 8, vendor: 'Google Inc.',
-    cookieEnabled: true, plugins: { length: 5 }, mimeTypes: { length: 4 }, webdriver: false,
-};
-global.window = global; global.self = global;
-global.location = { href: 'https://search.jd.com/Search', origin: 'https://search.jd.com', host: 'search.jd.com', hostname: 'search.jd.com', protocol: 'https:' };
-global.document = { cookie: '', referrer: '', createElement: () => ({}), getElementsByTagName: () => [], body: { innerHTML: '' }, head: null, currentScript: null };
-global.setTimeout = setTimeout; global.clearTimeout = clearTimeout; global.setInterval = setInterval; global.clearInterval = clearInterval;
-global.atob = (str) => Buffer.from(str, 'base64').toString('binary');
-global.btoa = (str) => Buffer.from(str, 'binary').toString('base64');
-global.Element = function() {}; global.HTMLAllCollection = function() {};
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
 
-require('./sha256.js');
-require('./js_security_v3_0.1.4.js');
+const ROOT = path.resolve(__dirname, "..");
+const SOURCE = path.join(
+  ROOT,
+  "archives",
+  "js_security_v3_0.1.4_20260527205706.js",
+);
+const SHIM = path.join(__dirname, "browser_shim.js");
 
-function generateH5st(appId, params, token) {
-    const signer = new ParamsSign({ appId });
-    if (token) {
-        signer._token = token;
-        signer._defaultToken = token;
-    }
-    const result = signer.signSync(params);
-    return result;
+function loadVm(options = {}) {
+  global.__JD_VM_CONFIG__ = {
+    ...(Number.isFinite(options.now_ms) ? { now_ms: options.now_ms } : {}),
+    ...(Number.isFinite(options.seed) ? { seed: options.seed } : {}),
+    ...(options.user_agent ? { user_agent: options.user_agent } : {}),
+  };
+  vm.runInThisContext(fs.readFileSync(SHIM, "utf8"), { filename: SHIM });
+  vm.runInThisContext(fs.readFileSync(SOURCE, "utf8"), { filename: SOURCE });
+  if (typeof global.ParamsSign !== "function") {
+    throw new Error("pinned VM did not expose ParamsSign");
+  }
 }
 
-// Parse args
+function generateH5st(appId, params, options = {}) {
+  loadVm(options);
+  const signer = new global.ParamsSign({
+    appId,
+    beta: false,
+    onSign() {},
+    onRequestToken() {},
+    onRequestTokenRemotely() {},
+  });
+  if (options.fingerprint || options.token) {
+    const originalRds = signer._$rds;
+    signer._$rds = function requestDepsFixture() {
+      originalRds.call(this);
+      if (options.fingerprint) this._fingerprint = options.fingerprint;
+      if (options.token) {
+        this._token = options.token;
+        this._isNormal = true;
+      }
+    };
+  }
+  const result = signer.signSync(params);
+  if (!result.h5st || result.h5st.split(";").length !== 10) {
+    throw new Error("VM returned an invalid 10-part h5st result");
+  }
+  return result;
+}
+
+function execute(input) {
+  const appId = input.app_id || input.appId || input.appid;
+  const params = input.params;
+  if (!appId || !params || typeof params !== "object") {
+    throw new Error("input requires app_id and params");
+  }
+  return generateH5st(appId, params, input);
+}
+
 function main() {
-    const args = process.argv.slice(2);
-    let appId, params, token;
-    
-    if (args[0] === '--stdin') {
-        let body = '';
-        process.stdin.on('data', chunk => body += chunk);
-        process.stdin.on('end', () => {
-            try {
-                const input = JSON.parse(body);
-                appId = input.appId || input.appid || '';
-                params = input.params || input;
-                token = input.token || '';
-                if (appId && params) {
-                    const result = generateH5st(appId, params, token);
-                    console.log(JSON.stringify(result));
-                } else {
-                    console.error(JSON.stringify({ error: 'Missing appId or params' }));
-                }
-            } catch(e) {
-                console.error(JSON.stringify({ error: e.message }));
-            }
-        });
-        return;
-    }
-    
-    if (args.length >= 2) {
-        appId = args[0];
-        params = JSON.parse(args[1]);
-        token = args[2] || '';
-        const result = generateH5st(appId, params, token);
-        console.log(JSON.stringify(result));
-    } else {
-        console.error(JSON.stringify({ error: 'Usage: node h5st_generator.js <appId> <jsonParams> [token]' }));
-    }
+  const args = process.argv.slice(2);
+  if (args[0] === "--stdin") {
+    let body = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => { body += chunk; });
+    process.stdin.on("end", () => {
+      try {
+        process.stdout.write(JSON.stringify(execute(JSON.parse(body))));
+      } catch (error) {
+        process.stderr.write(`${JSON.stringify({ error: error.message })}\n`);
+        process.exitCode = 1;
+      }
+    });
+    return;
+  }
+
+  if (args.length < 2) {
+    process.stderr.write(
+      "Usage: node h5st_generator.js APP_ID JSON_PARAMS [NOW_MS] [SEED]\n",
+    );
+    process.exitCode = 2;
+    return;
+  }
+  try {
+    const result = generateH5st(args[0], JSON.parse(args[1]), {
+      now_ms: args[2] === undefined ? undefined : Number(args[2]),
+      seed: args[3] === undefined ? undefined : Number(args[3]),
+    });
+    process.stdout.write(JSON.stringify(result));
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({ error: error.message })}\n`);
+    process.exitCode = 1;
+  }
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { generateH5st };
