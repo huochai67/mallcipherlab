@@ -1,129 +1,189 @@
 'use strict';
 
 /**
- * PDD key generator — reimplementation of Rre VM program 6 & 7.
+ * Exact high-level reimplementation of Qre VM programs 2-7.
  *
- * Program 6 (generateAESKey): constructs 32-char key
- *   key = "v2" + nanoid() + padding + getPreKey()
- *   where padding = derived from getCount() counter
+ * Program 2: getCount
+ * Program 3: setCount
+ * Program 4: getPreKey
+ * Program 5: setPreKey
+ * Program 6: generateAESKey
+ * Program 7: generateIV
  *
- * Program 7 (generateIV): constructs 16-char IV
- *   iv = SHA256(nanoid() + "iv").toString().substring(0, 16)
- *
- * PDD uses a custom nanoid with a base64url-like alphabet.
+ * The implementation intentionally keeps the browser storage state visible:
+ *   rs_key   = timestamp used by the previous key
+ *   rs_count = three-digit rolling counter (000..999)
  */
 
 const crypto = require('crypto');
 
-// PDD's nanoid alphabet (found in string table: "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict")
-const NANOID_ALPHABET = 'useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict';
+// Exact 64-character alphabet used by the bundle's nanoid implementation.
+const NANOID_ALPHABET =
+    'useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict';
 
-// Local state (simulating localStorage in browser)
-let keyCount = 0;
-const preKeyStore = Object.create(null);
+const STORAGE_KEY = 'rs_key';
+const STORAGE_COUNT = 'rs_count';
 
-function nanoid(size = 21) {
-    const bytes = crypto.randomBytes(size);
+class MemoryStorage {
+    constructor(initial = {}) {
+        this.values = new Map();
+        for (const [key, value] of Object.entries(initial)) {
+            this.setItem(key, value);
+        }
+    }
+
+    getItem(key) {
+        key = String(key);
+        return this.values.has(key) ? this.values.get(key) : null;
+    }
+
+    setItem(key, value) {
+        this.values.set(String(key), String(value));
+    }
+
+    removeItem(key) {
+        this.values.delete(String(key));
+    }
+
+    clear() {
+        this.values.clear();
+    }
+
+    toJSON() {
+        return Object.fromEntries(this.values);
+    }
+}
+
+const defaultStorage = new MemoryStorage();
+
+function resolveStorage(storage) {
+    if (storage === null) return null;
+    return storage || defaultStorage;
+}
+
+function readNow(now) {
+    const value = typeof now === 'function' ? now() :
+        (now === undefined ? Date.now() : now);
+    return String(value);
+}
+
+/**
+ * Bundle-equivalent nanoid.
+ *
+ * The original iterates the random byte array backwards and masks each byte
+ * with 63, rather than using modulo over the alphabet length.
+ */
+function nanoid(size = 21, randomBytes = crypto.randomBytes) {
+    size |= 0;
+    if (size < 0) throw new RangeError('nanoid size must be non-negative');
+
+    const bytes = randomBytes(size);
+    if (!bytes || bytes.length < size) {
+        throw new Error(`randomBytes returned ${bytes ? bytes.length : 0} bytes; expected ${size}`);
+    }
+
     let id = '';
-    for (let i = 0; i < size; i++) {
-        id += NANOID_ALPHABET[bytes[i] % NANOID_ALPHABET.length];
+    while (size--) {
+        id += NANOID_ALPHABET[bytes[size] & 63];
     }
     return id;
 }
 
-function getCount() {
-    return keyCount;
+function getCount(storage = defaultStorage) {
+    storage = resolveStorage(storage);
+    if (!storage) return '000';
+    return String(storage.getItem(STORAGE_COUNT) || '000').padStart(3, '0');
 }
 
-function setCount(val) {
-    keyCount = val;
+function setCount(currentCount, storage = defaultStorage) {
+    storage = resolveStorage(storage);
+    if (!storage) return;
+
+    const incremented = parseInt(currentCount) + 1;
+    const next = incremented > 999 ? 0 : incremented;
+    storage.setItem(STORAGE_COUNT, String(next).padStart(3, '0'));
 }
 
-function getPreKey() {
-    const keys = Object.keys(preKeyStore);
-    if (keys.length > 0) {
-        return preKeyStore[keys[keys.length - 1]] || nanoid(10);
-    }
-    return nanoid(10);
+function getPreKey(storage = defaultStorage) {
+    storage = resolveStorage(storage);
+    return storage ? (storage.getItem(STORAGE_KEY) || '') : '';
 }
 
-function setPreKey(key, value) {
-    preKeyStore[key] = value || key;
+function setPreKey(timestamp, storage = defaultStorage) {
+    storage = resolveStorage(storage);
+    if (storage) storage.setItem(STORAGE_KEY, timestamp);
 }
 
-// ── Key generation ────────────────────────────────────────
+/**
+ * Exact pseudocode recovered from VM program 6:
+ *
+ *   now      = Date.now().toString()
+ *   count    = getCount()
+ *   previous = getPreKey()
+ *   tail     = previous ? previous.slice(-5) : ''
+ *   base     = 'v' + '2' + now + tail + count
+ *   key      = base + nanoid(max(0, 32 - base.length))
+ *   setPreKey(now)
+ *   setCount(count)
+ */
+function generateAESKey(options = {}) {
+    const storage = resolveStorage(options.storage);
+    const timestamp = readNow(options.now);
+    const count = getCount(storage);
+    const previous = getPreKey(storage);
+    const previousTail = previous ? previous.slice(-5) : '';
+    const base = 'v' + '2' + timestamp + previousTail + count;
+    const randomLength = Math.max(0, 32 - base.length);
+    const random = randomLength > 0
+        ? nanoid(randomLength, options.randomBytes || crypto.randomBytes)
+        : '';
+    const key = base + random;
 
-let _counter = Math.floor(Math.random() * 1e9);
-
-function generateAESKey() {
-    // Browser key: v2 + 21_digits + 9_b64url = 32 chars
-    // The 21 digits: Date.now()(13) + counter_part(8)
-    const ts = String(Date.now());
-
-    // Counter fills the gap between ts and the base64 part
-    const remaining = 32 - 2 - ts.length - 9; // 9 = base64url suffix
-    const ct = String(_counter++);
-    if (_counter >= 1e9) _counter = 0;
-
-    const randBytes = crypto.randomBytes(9);
-    const rand = randBytes.toString('base64')
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-        .substring(0, 9);
-
-    let key = 'v2' + ts + ct.padStart(remaining, '0') + rand;
-    return key.substring(0, 32);
+    setPreKey(timestamp, storage);
+    setCount(count, storage);
+    return key;
 }
 
-function generateIV() {
-    // Based on Rre VM program 7 disassembly
-    const rand = nanoid(21);
-    const raw = rand + 'iv';
-    const hash = crypto.createHash('sha256').update(raw).digest('hex');
-    return hash.substring(0, 16);
+/** Exact pseudocode recovered from VM program 7. */
+function generateIV(options = {}) {
+    const timestamp = readNow(options.now);
+    return crypto.createHash('sha256')
+        .update(timestamp + 'iv', 'utf8')
+        .digest('hex')
+        .substring(0, 16);
 }
 
-// ── Full token generation ─────────────────────────────────
-
-function getcsr_risk_token() {
-    const key = generateAESKey();
-    const iv = generateIV();
-
-    const RSA_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkzFlw7BUJTlbFYd9VYUZ
-lsgd40jdVCoxdFi1l6UO6HflptLWHAU+IZItMBVHrIEd3FVgVCeA9idY9XaQAABu
-P4irOLm4haXvvsJZP7hi6SjORh/c/ZEDExEjLfzvMcGDL1k36ILqq49tvY4dEgaZ
-sm9+LFOcL1IP0AtcMWZrLKC2H5jpTg6AUY4BjTZZ2gatFrNBVNYzFOS5VDGa8Vjr
-Nlo8QsEFzQQjQCC7A5PToo/F2GnUfKADnRuLfLG1eujUMfmZBs9TD8XByj3HZzkb
-AQJ1nanImWwggnuPq3aGvKmGMmc8Ue9E82kaz98VhpR7tv8EKKnkXNsI26NSrmcU
-XwIDAQAB
------END PUBLIC KEY-----`;
-
-    const plaintext = key + iv;
-    const encrypted = crypto.publicEncrypt({
-        key: RSA_KEY,
-        padding: crypto.constants.RSA_PKCS1_PADDING,
-    }, Buffer.from(plaintext, 'utf8'));
-
-    return {
-        encryptedData: encrypted.toString('base64'),
-        key,
-        iv
-    };
+/** Program-0 generation ordering: key first, then IV. RSA packs iv + key. */
+function generateKeyIv(options = {}) {
+    const key = generateAESKey(options);
+    const iv = generateIV(options);
+    return { key, iv };
 }
 
-module.exports = { generateAESKey, generateIV, getcsr_risk_token };
+function resetDefaultState() {
+    defaultStorage.clear();
+}
 
-// ── CLI test ──────────────────────────────────────────────
+module.exports = {
+    NANOID_ALPHABET,
+    STORAGE_KEY,
+    STORAGE_COUNT,
+    MemoryStorage,
+    defaultStorage,
+    nanoid,
+    getCount,
+    setCount,
+    getPreKey,
+    setPreKey,
+    generateAESKey,
+    generateIV,
+    generateKeyIv,
+    resetDefaultState,
+};
+
 if (require.main === module) {
-    console.log('Generated key:', generateAESKey());
-    console.log('Generated IV: ', generateIV());
-    console.log('');
-    console.log('Full token:');
-    const token = getcsr_risk_token();
-    console.log('  key:', token.key, '(' + token.key.length + ')');
-    console.log('  iv:', token.iv, '(' + token.iv.length + ')');
-    console.log('  csr:', token.encryptedData.substring(0, 40) + '...');
-
-    console.log('\nKey starts with "v2":', token.key.startsWith('v2'));
-    console.log('Expected format: v2 + timestamp + counter + random (32 chars)');
+    const result = generateKeyIv();
+    console.log('Generated key:', result.key, `(${result.key.length})`);
+    console.log('Generated IV: ', result.iv, `(${result.iv.length})`);
+    console.log('State:', defaultStorage.toJSON());
 }

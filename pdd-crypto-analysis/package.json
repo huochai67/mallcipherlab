@@ -1,4 +1,11 @@
 {
+  "name": "pdd-crypto-analysis",
+  "private": true,
+  "scripts": {
+    "test": "node scripts/test_keygen.js && node scripts/test_aes_tools.js && node scripts/verify_aes_fixture.js",
+    "test:keygen": "node scripts/test_keygen.js",
+    "disasm": "node scripts/disasm.js"
+  },
   "dependencies": {
     "playwright": "^1.61.1"
   }

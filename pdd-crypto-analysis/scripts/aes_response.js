@@ -1,13 +1,13 @@
 'use strict';
 
 /**
- * PDD encrypt_info AES-256-CBC decrypt + zlib inflate.
+ * PDD encrypt_info AES-256-CBC decrypt + optional zlib inflate.
  *
  * Complete pipeline:
- *   1. Strip transport prefix+suffix from base64url encrypt_info
+ *   1. Read the final compression marker and strip that one character
  *   2. Base64url decode → AES-256-CBC ciphertext (16-byte aligned)
- *   3. AES decrypt with key(32B UTF-8) + IV(16B UTF-8) → deflate-compressed JSON
- *   4. zlib.inflate → JSON string
+ *   3. AES decrypt with key(32B UTF-8) + IV(16B UTF-8)
+ *   4. marker === "1" ? zlib.inflate(plaintext) : plaintext
  *   5. JSON.parse → goods data
  *
  * Usage:
@@ -19,68 +19,52 @@
 const crypto = require('crypto');
 const zlib = require('zlib');
 
-const TRANSPORT_PREFIX_LENGTH = 6;
-const TRANSPORT_SUFFIX_LENGTH = 2;
+const TRANSPORT_PREFIX_LENGTH = 0;
+const TRANSPORT_SUFFIX_LENGTH = 1;
 
 /**
- * Parse encrypt_info, automatically detecting prefix/suffix boundaries.
- * The ciphertext base64url portion must have length divisible by 4,
- * and decode to a length divisible by 16 (AES block size).
+ * Exact Qre program-1 wire format:
+ *
+ *   encrypt_info = base64url(ciphertext, padding optional) + compressionMarker
+ *   compressionMarker === "1" means zlib; every other marker means plaintext.
  */
 function parseEncryptInfo(encryptInfo) {
-    if (typeof encryptInfo !== 'string' || encryptInfo.length < 16) {
+    if (typeof encryptInfo !== 'string' || encryptInfo.length < 2) {
         throw new TypeError('encrypt_info must be a non-empty string');
     }
 
-    // Known format from reverse engineering: 6-char prefix + base64url + 2-char suffix.
-    // Try this first (most common). The prefix+suffix chars adjust so the core
-    // base64url portion has length divisible by 4.
-    const preferredPairs = [
-        [6, 2],   // most common: seen in decrypt_test.js sample
-        [0, 1],   // seen in payload.json sample
-    ];
-    const allPairs = [];
-    for (const [pl, sl] of preferredPairs) {
-        allPairs.push([pl, sl]);
-    }
-    for (let prefixLen = 0; prefixLen <= 10; prefixLen++) {
-        for (let suffixLen = 0; suffixLen <= 10; suffixLen++) {
-            const key = prefixLen * 100 + suffixLen;
-            if (!preferredPairs.some(([pl, sl]) => pl === prefixLen && sl === suffixLen)) {
-                allPairs.push([prefixLen, suffixLen]);
-            }
-        }
+    const compressionMarker = encryptInfo.slice(-1);
+    const core = encryptInfo.slice(0, -1);
+    if (!/^[A-Za-z0-9_-]+={0,2}$/.test(core)) {
+        throw new Error('encrypt_info ciphertext is not valid base64url');
     }
 
-    for (const [prefixLen, suffixLen] of allPairs) {
-        if (prefixLen + suffixLen >= encryptInfo.length) continue;
-
-        const core = encryptInfo.slice(prefixLen, suffixLen > 0 ? -suffixLen : undefined);
-        if (core.length % 4 !== 0) continue;
-
-        const b64 = core.replace(/-/g, '+').replace(/_/g, '/');
-        const decoded = Buffer.from(b64, 'base64');
-        if (decoded.length === 0) continue;
-        if (decoded.length % 16 !== 0) continue;
-
-        return {
-            transportPrefix: encryptInfo.slice(0, prefixLen),
-            transportSuffix: suffixLen > 0 ? encryptInfo.slice(-suffixLen) : '',
-            prefixLen,
-            suffixLen,
-            ciphertext: decoded
-        };
+    let b64 = core.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const ciphertext = Buffer.from(b64, 'base64');
+    if (!ciphertext.length || ciphertext.length % 16 !== 0) {
+        throw new Error('encrypt_info ciphertext is not AES block aligned');
     }
 
-    throw new Error('Could not parse encrypt_info: no valid AES-aligned boundaries found');
+    return {
+        core,
+        compressionMarker,
+        compressed: compressionMarker === '1',
+        ciphertext,
+        // Compatibility fields retained for existing callers.
+        transportPrefix: '',
+        transportSuffix: compressionMarker,
+        prefixLen: 0,
+        suffixLen: 1,
+    };
 }
 
 /**
  * Decrypt encrypt_info with the given AES-256-CBC key and IV.
- * Handles zlib-compressed plaintext (PDD compresses response JSON with deflate).
+ * Follows the final compression marker exactly as Qre program 1 does.
  *
  * Key must be 32 chars UTF-8, IV must be 16 chars UTF-8.
- * Returns { transportPrefix, transportSuffix, plaintext, decompressed, data }
+ * Returns { compressionMarker, compressed, plaintext, decompressed, data }
  */
 function decrypt(encryptInfo, key, iv) {
     const keyBuf = typeof key === 'string' ? Buffer.from(key, 'utf8') : key;
@@ -89,27 +73,21 @@ function decrypt(encryptInfo, key, iv) {
     if (keyBuf.length !== 32) throw new RangeError(`AES-256-CBC requires 32-byte key, got ${keyBuf.length}`);
     if (ivBuf.length !== 16) throw new RangeError(`AES-256-CBC requires 16-byte IV, got ${ivBuf.length}`);
 
-    const { transportPrefix, transportSuffix, ciphertext, prefixLen, suffixLen } = parseEncryptInfo(encryptInfo);
+    const parsed = parseEncryptInfo(encryptInfo);
+    const { ciphertext, compressed, compressionMarker } = parsed;
 
     const decipher = crypto.createDecipheriv('aes-256-cbc', keyBuf, ivBuf);
     decipher.setAutoPadding(true);
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 
-    // The plaintext is zlib (deflate) compressed JSON
-    let decompressed;
-    try {
-        decompressed = zlib.inflateSync(plaintext);
-    } catch(e) {
-        // Fallback: may be uncompressed JSON (small responses or older versions)
-        decompressed = plaintext;
-    }
+    const decompressed = compressed ? zlib.inflateSync(plaintext) : plaintext;
 
     const jsonStr = decompressed.toString('utf8');
     try {
         const data = JSON.parse(jsonStr);
-        return { transportPrefix, transportSuffix, prefixLen, suffixLen, plaintext, decompressed, jsonStr, data };
+        return { ...parsed, compressionMarker, plaintext, decompressed, jsonStr, data };
     } catch (e) {
-        return { transportPrefix, transportSuffix, prefixLen, suffixLen, plaintext, decompressed, jsonStr, data: null, parseError: e.message };
+        return { ...parsed, compressionMarker, plaintext, decompressed, jsonStr, data: null, parseError: e.message };
     }
 }
 
@@ -119,42 +97,40 @@ function decryptResponse(encryptInfo, key, iv) {
 }
 
 /**
- * Encrypt JSON data, matching PDD's format (zlib deflate + AES-256-CBC).
+ * Encrypt JSON data using the exact Qre program-1 wire format.
  */
-function encrypt(data, key, iv, transportPrefix, transportSuffix) {
+function encrypt(data, key, iv, options = {}) {
     const keyBuf = typeof key === 'string' ? Buffer.from(key, 'utf8') : key;
     const ivBuf = typeof iv === 'string' ? Buffer.from(iv, 'utf8') : iv;
 
     if (keyBuf.length !== 32) throw new RangeError(`AES-256-CBC requires 32-byte key, got ${keyBuf.length}`);
     if (ivBuf.length !== 16) throw new RangeError(`AES-256-CBC requires 16-byte IV, got ${ivBuf.length}`);
 
-    if (!transportPrefix) transportPrefix = '';
-    if (!transportSuffix) transportSuffix = '';
+    if (typeof options === 'boolean') options = { compress: options };
+    const compressed = options.compress !== false;
 
-    // Step 1: JSON → deflate compress
+    // Step 1: JSON → optionally deflate-compressed bytes
     const jsonStr = typeof data === 'string' ? data : JSON.stringify(data);
-    const compressed = zlib.deflateSync(Buffer.from(jsonStr, 'utf8'));
+    const plaintext = compressed
+        ? zlib.deflateSync(Buffer.from(jsonStr, 'utf8'))
+        : Buffer.from(jsonStr, 'utf8');
 
     // Step 2: AES-256-CBC encrypt
     const cipher = crypto.createCipheriv('aes-256-cbc', keyBuf, ivBuf);
     cipher.setAutoPadding(true);
-    const ciphertext = Buffer.concat([cipher.update(compressed), cipher.final()]);
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
 
-    // Step 3: Base64url encode + transport wrapper
-    const fullB64 = ciphertext.toString('base64');
-    const b64url = fullB64.replace(/\+/g, '-').replace(/\//g, '_');
-
-    let core = b64url;
-    if (core.length % 4 !== 0) {
-        core = core.replace(/=+$/g, '');
-    }
-
-    return transportPrefix + core + transportSuffix;
+    // Step 3: Base64url encode + one-character compression marker
+    const core = ciphertext.toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+    return core + (compressed ? '1' : '0');
 }
 
 // Backward compat
-function encryptResponse(data, key, iv, transportPrefix, transportSuffix) {
-    return encrypt(data, key, iv, transportPrefix, transportSuffix);
+function encryptResponse(data, key, iv, options) {
+    return encrypt(data, key, iv, options);
 }
 
 module.exports = {
@@ -180,8 +156,7 @@ if (require.main === module) {
             const result = decrypt(encryptInfo, key, iv);
             if (result.data) {
                 console.log('SUCCESS');
-                console.log(`Prefix: ${JSON.stringify(result.transportPrefix)} (${result.prefixLen})`);
-                console.log(`Suffix: ${JSON.stringify(result.transportSuffix)} (${result.suffixLen})`);
+                console.log(`Compression marker: ${JSON.stringify(result.compressionMarker)}`);
                 if (result.data.goods) {
                     console.log(`Goods:  ${result.data.goods.goods_id} | ${result.data.goods.goods_name}`);
                 }

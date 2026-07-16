@@ -1,14 +1,10 @@
 'use strict';
 
 /**
- * AES Key Discovery Harness for PDD encrypt_info.
+ * Historical AES Key Discovery Harness for PDD encrypt_info.
  *
- * The core problem: Xre() generates a random 32-char key and 16-char IV,
- * sends them via csr_risk_token (RSA-encrypted), but decrypting the response
- * with the same key/IV FAILS.
- *
- * This script tests multiple key derivation strategies to find the actual
- * decryption key used by the Rre VM / CryptoJS.AES.decrypt.
+ * Direct UTF-8 key/IV is the confirmed Qre behavior. The extra derivation
+ * strategies remain only for diagnosing old or mismatched fixtures.
  *
  * Usage:
  *   node scripts/key_discovery.js '<encrypt_info>' '<captured-key>' '<captured-iv>'
@@ -33,7 +29,7 @@ const STRATEGIES = {
 
     /**
      * Strategy 1: Direct use of captured key/IV as UTF-8 strings.
-     * This is what Xre() returns: 32-char alphanumeric key + 16-char alphanumeric IV.
+     * This is what Qre uses: a 32-character UTF-8 key and 16-character hex IV.
      */
     direct(key, iv) {
         return { name: 'direct (UTF-8 pass-through)', key: Buffer.from(key, 'utf8'), iv: Buffer.from(iv, 'utf8') };
@@ -237,8 +233,7 @@ function discoverKey(encryptInfo, rawKey, rawIv) {
     }
 
     console.log(`\nParsed encrypt_info:`);
-    console.log(`  Transport prefix: "${parsed.transportPrefix}" (${parsed.prefixLen} chars)`);
-    console.log(`  Transport suffix: "${parsed.transportSuffix}" (${parsed.suffixLen} chars)`);
+    console.log(`  Compression marker: "${parsed.compressionMarker}"`);
     console.log(`  AES ciphertext: ${parsed.ciphertext.length} bytes (${parsed.ciphertext.length / 16} blocks)`);
     console.log(`\nInput key (from browser): "${rawKey}" (${rawKey.length} chars)`);
     console.log(`Input IV  (from browser):  "${rawIv}" (${rawIv.length} chars)`);
@@ -278,9 +273,9 @@ function discoverKey(encryptInfo, rawKey, rawIv) {
         }
     } else {
         console.log('\nNo strategy succeeded. Possible causes:');
-        console.log('  1. The captured key/IV are from a different session than the encrypt_info');
-        console.log('  2. The key/IV captured from browser are not the actual decrypt parameters');
-        console.log('  3. The plaintext is compressed (zlib deflate) — already handled automatically');
+        console.log('  1. The key/IV are not paired with this exact request');
+        console.log('  2. The response marker or bundle version differs from this fixture');
+        console.log('  3. The captured value was overwritten by a later concurrent request');
         console.log('');
         console.log('Next steps:');
         console.log('  - Ensure encrypt_info and key/IV are from the SAME API call');

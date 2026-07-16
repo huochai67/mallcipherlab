@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         PDD 商品数据解密助手
 // @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  自动捕获 PDD 加密响应并解密，保存到 window.__pdd
+// @version      1.1
+// @description  观察 PDD 每次请求的 key/IV、加密响应和页面已解密 JSON
 // @match        https://mobile.pinduoduo.com/goods.html*
 // @match        https://mobile.pinduoduo.com/*goods_id=*
 // @grant        none
@@ -17,7 +17,10 @@
         goods_id: null,
         encrypted: null,
         decrypted: null,
-        keys: null,         // { key, iv } captured from fetch interceptor
+        keys: null,         // latest observed { key, iv }
+        keyEvents: [],      // every _encryptionKeys assignment
+        encryptedEvents: [],
+        decryptedEvents: [],
         goods_name: null,
         price: null,
         skus: null,
@@ -28,17 +31,30 @@
     const m = window.location.href.match(/goods_id=(\d+)/);
     if (m) window.__pdd.goods_id = m[1];
 
-    // Hook fetch: 捕获 _encryptionKeys (key + iv)
-    const _origFetch = window.fetch;
-    window.fetch = function(url, init) {
-        if (init && init._encryptionKeys) {
-            window.__pdd.keys = {
-                key: init._encryptionKeys.key,
-                iv: init._encryptionKeys.iv
-            };
+    // _encryptionKeys belongs to the Axios config, not native fetch init.
+    Object.defineProperty(Object.prototype, '_encryptionKeys', {
+        configurable: true,
+        enumerable: false,
+        get: function() { return undefined; },
+        set: function(value) {
+            if (value && value.key && value.iv) {
+                const event = {
+                    index: window.__pdd.keyEvents.length,
+                    time: Date.now(),
+                    key: value.key,
+                    iv: value.iv
+                };
+                window.__pdd.keys = { key: value.key, iv: value.iv };
+                window.__pdd.keyEvents.push(event);
+            }
+            Object.defineProperty(this, '_encryptionKeys', {
+                value,
+                writable: true,
+                enumerable: true,
+                configurable: true
+            });
         }
-        return _origFetch.apply(this, arguments);
-    };
+    });
 
     // Hook JSON.parse: 捕获加密和解密数据
     const _origParse = JSON.parse;
@@ -51,11 +67,21 @@
                     server_time: result.server_time,
                     encrypt_status: result.encrypt_status
                 };
+                window.__pdd.encryptedEvents.push({
+                    index: window.__pdd.encryptedEvents.length,
+                    time: Date.now(),
+                    ...window.__pdd.encrypted
+                });
             }
             if (typeof text === 'string' && text.length > 1000 &&
                 result.goods && result.goods.goods_id &&
                 (result.destination_url || result.section_list)) {
                 window.__pdd.decrypted = result;
+                window.__pdd.decryptedEvents.push({
+                    index: window.__pdd.decryptedEvents.length,
+                    time: Date.now(),
+                    data: result
+                });
                 window.__pdd.goods_name = result.goods?.goods_name;
                 window.__pdd.price = {
                     min_group_price: result.price?.min_group_price,

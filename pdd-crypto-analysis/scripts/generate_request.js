@@ -6,8 +6,8 @@
  * Usage:
  *   node scripts/generate_request.js [goods_id] [key] [iv]
  *
- * If key+iv are provided (from browser Xre() capture), they are used directly.
- * Otherwise a simulated key/iv is generated (may not match server encryption).
+ * If key+iv are provided, they are used directly. Otherwise the exact Qre
+ * program-6/program-7 reimplementation generates them locally.
  *
  * Prerequisites:
  *   $env:PDD_COOKIES = "api_uid=...; PDDAccessToken=..."
@@ -50,7 +50,8 @@ if (EXTERNAL_KEY && EXTERNAL_IV) {
     const { RSA_PUBLIC_KEY } = require('./encryptToken');
     const csr = crypto.publicEncrypt(
         { key: RSA_PUBLIC_KEY, padding: crypto.constants.RSA_PKCS1_PADDING },
-        Buffer.from(key + iv, 'utf8')
+        // Original VM program 0 encrypts IV first, then key.
+        Buffer.from(iv + key, 'utf8')
     ).toString('base64');
     var csr_token = csr;
 } else {
@@ -58,10 +59,8 @@ if (EXTERNAL_KEY && EXTERNAL_IV) {
     key = token.key;
     iv = token.iv;
     csr_token = token.encryptedData;
-    console.log('Generated session key:', key);
-    console.log('Generated session IV: ', iv);
-    console.log('WARNING: simulated key may not match server encryption.');
-    console.log('Capture real key/IV from browser Xre() breakpoint for full decryption.');
+    console.log('Generated Qre key:', key);
+    console.log('Generated Qre IV: ', iv);
 }
 
 // ── build request ─────────────────────────────────────────

@@ -1,297 +1,274 @@
-# PDD 拼多多移动端商品 API 加密逆向分析
+# PDD 商品详情加密链分析
 
-> 分析目标：逆向 PDD 移动端商品详情页 API (`/proxy/api/api/oak/integration/render`) 的加密机制。
->
-> 分析时间：2026-07
-> 最终状态：解密管线已完全攻克，支持自动化 key 捕获 + 离线解密。
+> 样本版本：`react_goods_c6c457883e861343f681_1026.js`
+> 最近核验：2026-07-16
+> 当前结论：Qre VM 的 key/IV、RSA 包装和响应解密协议均已还原，并有字节码差分测试。
 
----
+## 1. 最终结论
 
-## 目录
+商品详情请求的加密拦截器执行以下流程：
 
-1. [架构概览](#1-架构概览)
-2. [加密机制详解](#2-加密机制详解)
-3. [解密管线](#3-解密管线)
-4. [工具与使用](#4-工具与使用)
-5. [关键发现与限制](#5-关键发现与限制)
-6. [文件清单](#6-文件清单)
-
----
-
-## 1. 架构概览
-
-PDD 移动端商品 API 使用三层防护：
-
-```
-请求层                   响应层
-┌──────────────┐        ┌──────────────────────┐
-│ anti_content │        │ encrypt_info          │
-│ (行为指纹)    │        │ (AES-256-CBC + zlib) │
-├──────────────┤        │ encrypt_status: 3     │
-│ csr_risk_token│       └──────────────────────┘
-│ (RSA 加密的密钥)│
-└──────────────┘
+```text
+Qre P6 生成 32 字符 key
+        ↓
+Qre P7 生成 16 字符 IV
+        ↓
+Qre P8：RSA PKCS#1 v1.5 加密 (IV + key)
+        ↓
+csr_risk_token 写入 POST body
+        ↓
+同一请求的 {key, iv} 保存到 config._encryptionKeys
+        ↓
+响应 encrypt_info 使用该请求对应的 key/iv 解密
 ```
 
-**数据流**：
+三个关键纠错：
 
-```
-客户端生成 key/iv → RSA 加密为 csr_risk_token → POST 请求
-    → 服务端验证 anti_content，解密 csr_risk_token
-    → JSON 响应 → zlib deflate → AES-256-CBC 加密 → base64url + transport 包装
-    → 客户端检测 encrypt_status=3 → 逆向解密 → 商品数据
-```
+1. 真正的字节码 VM 名为 **Qre**；bundle 中的 `Rre` 是无关的 RegExp helper。
+2. RSA 明文顺序为 **`iv + key`（16 + 32 字节）**，不是 `key + iv`。
+3. `encrypt_info` 是 **Base64URL 密文 + 1 字符压缩标志**，没有可变 transport 前缀。
 
----
+旧实现把 `key + iv` 封装进 RSA。该明文仍为 48 字节，服务端可以按“前 16 字节 IV、后 32 字节 key”解析，但解析出的材料与本地保存值不同，因而出现“`encrypt_status:3` 但本地 bad decrypt”。
 
-## 2. 加密机制详解
+## 2. key/IV 精确算法
 
-### 2.1 encrypt_info（响应加密）
-
-**Transport 格式**：
-
-```
-encrypt_info = <prefix> + <base64url_ciphertext> + <suffix>
-```
-
-prefix/suffix 长度可变（常见 6+2 或 0+1），保证 ciphertext base64url 长度 % 4 == 0。
-
-**完整解密管线**：
-
-```
-encrypt_info
-  → 剥 transport prefix+suffix
-  → base64url decode → AES-256-CBC ciphertext
-  → AES-256-CBC 解密 (key: 32B UTF-8, iv: 16B UTF-8, PKCS7)
-  → zlib.inflate 解压 (头字节 0x78 0x9C)
-  → JSON.parse → 商品数据
-```
-
-### 2.2 csr_risk_token（密钥交换）
-
-- 算法：RSA-2048 PKCS#1 v1.5
-- 明文：32 字符 key + 16 字符 iv = 48 字节 UTF-8
-- 公钥：硬编码在主 bundle `Hk()[41]` 中
-- 服务端 RSA 解密后使用独立密钥派生，**不使用客户端发送的 key/IV 直接加密**
-
-### 2.3 anti_content（行为指纹）
-
-- 由 `react_anti_co_*.js` chunk 中的 Rre VM 字节码生成
-- 格式：`"0as"` 开头的 base64url 字符串（~310 字符）
-- Node.js 可独立生成（见 `scripts/anti_content.js`）
-
-### 2.4 Rre VM（字节码虚拟机）
-
-- 960 字节 bytecode，50+ opcodes，10 个程序
-- 程序 6 (generateAESKey)：构建 32 字符 key = `"v2" + Date.now() + counter + random`
-- 程序 7 (generateIV)：构建 16 字符 iv = `SHA256(random + "iv")[0:16]`
-- 已完整反编译（见 `scripts/disasm.js`）
-
----
-
-## 3. 复现指南
-
-### 3.0 前置准备
-
-**环境依赖**：
-
-```bash
-# Node.js 工具
-npm install
-
-# Python 自动化捕获（方法 B 需要）
-pip install git+https://github.com/feder-cr/invisible_playwright.git
-python -m invisible_playwright fetch
-```
-
-**获取 JS bundle 文件**（anti_content 生成需要）：
-
-打开 Chrome → F12 → Sources → 搜索 `react_anti_co` → 右键 Save as → 放入 `raw/` 目录。同时获取 `react_goods_*.js`（可选，仅供分析）。
-
-**获取 Cookie**：
-
-打开 `https://mobile.pinduoduo.com` 并登录。F12 → Application → Cookies → 至少需要这三条：
-- `api_uid`
-- `PDDAccessToken`
-- `pdd_user_id`
-
-**获取 `_oak_rcto`**：
-
-从搜索结果页点击商品进入详情页，浏览器地址栏 URL 中包含 `_oak_rcto=...` 参数。此值可长期复用。
-
----
-
-### 3.1 方法 A：浏览器油猴脚本（最简单）
-
-1. 安装 Tampermonkey 浏览器扩展
-2. 导入 `tools/pdd_crypto_hook.user.js`
-3. 打开 PDD 商品页（URL 中需带 `_oak_rcto`），或从搜索结果点击进入
-4. F12 Console 查看结果：
+### 2.1 key：Qre Program 6
 
 ```javascript
-// 获取 key/iv
-window.__pdd.keys
-// → { key: "v2178...", iv: "..." }
+function generateAESKey() {
+  const timestamp = Date.now().toString();
+  const count = (localStorage.getItem('rs_count') || '000')
+    .padStart(3, '0');
+  const previous = localStorage.getItem('rs_key') || '';
+  const previousTail = previous ? previous.slice(-5) : '';
 
-// 获取加密响应
-window.__pdd.encrypted.encrypt_info
+  const base = 'v2' + timestamp + previousTail + count;
+  const key = base + nanoid(Math.max(0, 32 - base.length));
 
-// 直接读解密数据（无需手动解密）
-window.__pdd.decrypted.goods.goods_name
+  localStorage.setItem('rs_key', timestamp);
+  const next = parseInt(count) + 1;
+  localStorage.setItem(
+    'rs_count',
+    String(next > 999 ? 0 : next).padStart(3, '0')
+  );
+  return key;
+}
 ```
 
-**跨商品复用**：同页面会话内 key/iv 不变。改 URL 中的 `goods_id` 后刷新页面，用同一对 key/iv 解密新响应。
+首次状态的固定部分为 `v2 + 13位时间戳 + 000`，再补 14 个随机字符。已有 `rs_key` 时会加入上一时间戳末 5 位，通常再补 9 个随机字符。
 
-**离线解密**——将捕获的 key/iv 和 encrypt_info 保存后用 Node.js 解密：
-
-```powershell
-node scripts/aes_response.js '<encrypt_info>' '<key>' '<iv>'
-```
-
----
-
-### 3.2 方法 B：invisible_playwright 全自动
-
-```powershell
-$env:PDD_COOKIES = "api_uid=...; PDDAccessToken=...; pdd_user_id=..."
-
-# 捕获 key/iv（10-15 秒）
-& python scripts/capture_key.py 976963702683
-# 输出 JSON: {"key": "v2178...", "iv": "..."}
-```
-
----
-
-### 3.3 发送请求 + 解密响应
-
-有了 key/iv 后，可独立发起请求：
-
-```powershell
-$env:PDD_COOKIES = "..."
-$env:OAK_RCTO = "..."        # 从浏览器 URL 获取
-
-# anti_content 由 Node.js 自动生成
-# key/iv 从步骤 3.1 或 3.2 获取
-node scripts/generate_request.js 624625371461 '<key>' '<iv>'
-```
-
-Node.js 程序化调用：
+### 2.2 nanoid
 
 ```javascript
-const { generateAntiContent } = require('./scripts/anti_content');
-const { getcsr_risk_token, decryptResponse } = require('./scripts/encryptToken');
-const { decrypt } = require('./scripts/aes_response');
+const alphabet =
+  'useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict';
 
-// 生成 anti_content
-const anti = generateAntiContent();  // → "0as..."
-
-// 用已知 key/iv 构建 csr_risk_token
-const crypto = require('crypto');
-const { RSA_PUBLIC_KEY } = require('./scripts/encryptToken');
-const csr = crypto.publicEncrypt(
-    { key: RSA_PUBLIC_KEY, padding: crypto.constants.RSA_PKCS1_PADDING },
-    Buffer.from(key + iv, 'utf8')
-).toString('base64');
-
-// 发送请求（需自行处理 HTTP，参考 generate_request.js）
-// ...
-
-// 解密响应
-const data = decrypt(encrypt_info, key, iv).data;
-// data.goods.goods_name → 商品名称
-// data.price.min_group_price → 拼团价
+function nanoid(size) {
+  const bytes = crypto.getRandomValues(new Uint8Array(size));
+  let result = '';
+  while (size--) result += alphabet[bytes[size] & 63];
+  return result;
+}
 ```
 
----
+原实现使用 Web Crypto、倒序读取随机字节，并以 `byte & 63` 选择字符。
 
-### 3.4 端到端验证
+### 2.3 IV：Qre Program 7
+
+```javascript
+const iv = SHA256(Date.now().toString() + 'iv')
+  .toString()
+  .substring(0, 16);
+```
+
+IV 是 SHA-256 十六进制字符串的前 16 字符。Program 0 先生成 key，再单独调用一次 `Date.now()` 生成 IV，因此两次时间戳可能相差 1 ms。
+
+### 2.4 RSA：Qre Programs 0/8
+
+```javascript
+const rawKey = generateAESKey();
+const rawIV = generateIV();
+const encryptedData = rsaPkcs1v15(rawIV + rawKey);
+
+return { encryptedData, rawKey, rawIV };
+```
+
+- 公钥：主 bundle 内置 RSA-2048 公钥。
+- Padding：PKCS#1 v1.5。
+- 明文：`iv + key`，共 48 字节 UTF-8。
+- 输出：标准 Base64，约 344 字符，写入 `csr_risk_token`。
+
+## 3. 响应解密协议
+
+Qre Program 1 的线格式：
+
+```text
+encrypt_info = base64url(AES_ciphertext) + compression_marker
+```
+
+- 最后 1 字符是压缩标志。
+- 标志为 `"1"`：AES 明文还需 `zlib.inflate`。
+- 其他标志：AES 明文直接按 UTF-8 解码。
+- Base64URL 的 `=` padding 可以省略，解码前补齐即可。
+
+完整流程：
+
+```text
+marker = encrypt_info.slice(-1)
+core   = encrypt_info.slice(0, -1)
+    ↓
+Base64URL decode（补齐 padding）
+    ↓
+AES-256-CBC / PKCS7
+key = 32 字节 UTF-8，IV = 16 字节 UTF-8
+    ↓
+marker === "1" ? zlib.inflate : 原文
+    ↓
+UTF-8 → JSON.parse
+```
+
+响应拦截器直接读取当前 Axios request config 中的 `_encryptionKeys`，没有第二套响应密钥派生。
+
+## 4. Qre VM 程序表
+
+| ID | 名称 | 作用 |
+|---:|---|---|
+| 0 | `encryptKeyAndIv` | 生成 key/IV、按 `iv + key` 做 RSA 包装 |
+| 1 | `decryptString` | 解析标志、AES 解密、可选 zlib、UTF-8 |
+| 2 | `getCount` | 读取并补齐 `rs_count` |
+| 3 | `setCount` | 递增计数，999 后回到 000 |
+| 4 | `getPreKey` | 读取 `rs_key` |
+| 5 | `setPreKey` | 保存本次时间戳 |
+| 6 | `generateAESKey` | 生成 32 字符 key |
+| 7 | `generateIV` | 生成 16 字符 IV |
+| 8 | `rsaEncrypt` | JSEncrypt / PKCS#1 v1.5 |
+| 9 | `aesDecrypt` | CryptoJS AES-CBC / PKCS7 |
+
+字节码总长 960 字节，存于 `raw/bytecodes_b64.txt`。`scripts/disasm.js` 已按真实 U16 little-endian 操作数宽度修正；旧版反汇编把高位 `00` 误识别为 opcode。
+
+## 5. anti_content 的位置
+
+`anti_content` 与 Qre 加密拦截器是两条独立链：
+
+- `react_anti_co_*.js` 的 module 47927/32455 负责 `anti_content`。
+- 输出以 `0as` 开头，当前样本通常约 310 字符。
+- `react_goods_*.js` 的 module 96361 包含 Qre、RSA、AES 与请求/响应拦截器。
+
+本地调用：
 
 ```powershell
-# 1. 确认 anti_content 生成正常
 node scripts/anti_content.js
-# 输出：0asWfxU...（~310 字符）
-
-# 2. 确认加解密 round-trip
-node scripts/test_aes_tools.js
-# 输出：Round-trip: PASS
-
-# 3. 确认线格式解析
-node scripts/verify_aes_fixture.js
-# 输出：wire-format fixture: PASS
-
-# 4. 用真实数据完整验证
-# 按 3.1 获取 key + iv + encrypt_info 后：
-node scripts/aes_response.js '<encrypt_info>' '<key>' '<iv>'
-# 输出：goods_name: ..., price: ...
 ```
 
----
+主程序现在只生成一次 token；模块调用和 CLI 输出一致。
 
-## 4. 工具与使用
+## 6. 本地复现与测试
 
-### 核心工具
+### 6.1 全部离线测试
 
-| 工具 | 用途 | 运行方式 |
+```powershell
+npm test
+```
+
+覆盖内容：
+
+- 固定时间、固定随机源的 Qre key/IV golden vector。
+- 可读实现与 960 字节 fixture 中 P0/P2-P7 key/IV 相关程序的差分执行。
+- `rs_key`、三位计数器及 999 → 000 回卷。
+- RSA 输入顺序断言：`iv + key`。
+- 压缩与未压缩两种 `encrypt_info` marker。
+- AES-256-CBC、PKCS7、Base64URL 与 JSON round-trip。
+
+### 6.2 生成 key/IV
+
+```powershell
+node scripts/keygen.js
+```
+
+程序化调用：
+
+```javascript
+const { generateKeyIv, MemoryStorage } = require('./scripts/keygen');
+
+const storage = new MemoryStorage();
+const { key, iv } = generateKeyIv({ storage });
+```
+
+### 6.3 生成 csr_risk_token
+
+```javascript
+const { getcsr_risk_token } = require('./scripts/encryptToken');
+
+const token = getcsr_risk_token();
+console.log(token.key, token.iv, token.encryptedData);
+```
+
+### 6.4 离线解密
+
+```powershell
+node scripts/aes_response.js "ENCRYPT_INFO" "KEY_32_CHARS" "IV_16_CHARS"
+```
+
+### 6.5 请求脚本
+
+```powershell
+$env:PDD_COOKIES = "COOKIE_HEADER"
+$env:OAK_RCTO = "OAK_RCTO"
+node scripts/generate_request.js TARGET_GOODS_ID
+```
+
+当前请求脚本默认使用已修正的 Qre key/IV 和 `iv + key` RSA 顺序。外部传入 key/IV 时也使用同样顺序。
+
+## 7. 验证状态
+
+| 项目 | 状态 | 证据 |
 |---|---|---|
-| `scripts/aes_response.js` | AES 解密 + zlib + transport | `node scripts/aes_response.js <ei> <key> <iv>` |
-| `scripts/anti_content.js` | Node.js 生成 anti_content | `node scripts/anti_content.js` |
-| `scripts/capture_key.py` | 自动化捕获 key/iv | `python scripts/capture_key.py <goods_id>` |
-| `scripts/generate_request.js` | 一键请求管线 | `node scripts/generate_request.js <gid> <key> <iv>` |
-| `scripts/key_discovery.js` | 18 种密钥策略测试 | `node scripts/key_discovery.js <ei> <key> <iv>` |
+| key 生成语义 | 通过 | 高层实现与原 Qre P6 固定向量逐字一致 |
+| IV 生成语义 | 通过 | 高层实现与原 Qre P7 固定向量逐字一致 |
+| 状态与计数器 | 通过 | 空状态、已有状态、回卷差分测试 |
+| RSA 拼接顺序 | 通过 | Qre P0 oracle 与 `publicEncrypt` 输入断言均为 `iv + key` |
+| 响应线格式 | 通过 | 本轮一次性原 Qre P1 动态探针；自动回归为合成 marker fixture |
+| AES/zlib/JSON | 通过 | 压缩和未压缩 round-trip |
+| anti_content CLI | 通过 | 本机 bundle 单次输出且为 `0as` 前缀；clean checkout 需补 `react_anti_co` chunk |
+| 脱敏真实响应 fixture | 待补 | 当前仓库未提交真实 payload/key/IV fixture |
+| 当前线上端到端请求 | 待复核 | 需要与当前 bundle、Cookie、`_oak_rcto` 同步核验 |
 
-### 分析工具
+## 8. 浏览器捕获边界
 
-| 工具 | 用途 |
-|---|---|
-| `scripts/disasm.js` | Rre VM 字节码反汇编器 |
-| `scripts/keygen.js` | 密钥生成器（字节码反编译实现） |
-| `scripts/analyze_encrypt_info.js` | encrypt_info 格式分析 |
-| `scripts/verify_aes_fixture.js` | 线格式验证 |
-| `scripts/encryptToken.js` | RSA 加密 + 解密 wrapper |
-| `tools/pdd_crypto_hook.user.js` | 油猴脚本（fetch + JSON.parse hook） |
+加密拦截器对每个符合条件的 POST 单独生成 key/IV，并不是页面会话只生成一次。因此捕获时必须把 key/IV 与具体请求及响应配对。
 
----
+现有 `capture_key.py` 的 setter 可以观察 `_encryptionKeys`，但只保存最后一次赋值；页面存在并发加密请求时可能取到另一请求的材料。更稳妥的采集记录应同时保存：
 
-## 5. 关键发现与限制
-
-### 已解决
-
-- **解密管线**：transport → AES-256-CBC → zlib → JSON（完整实现）
-- **anti_content 生成**：Node.js 独立运行，无需浏览器
-- **key/IV 捕获**：通过 `Object.prototype` setter trap 或油猴脚本
-- **字节码反编译**：Rre VM 960 字节完整反汇编，key/iv 格式已确认
-- **key/IV 跨商品复用**：同页面会话内共用
-
-### 限制
-
-- **独立密钥生成**：服务端不使用 csr_risk_token 中的 key/IV 直接加密，有独立派生逻辑。无法从客户端静态分析。
-- **主 bundle 无法独立运行**：`react_goods_*.js` 依赖 webpack runtime（HTML 内联脚本）
-- **需要真实浏览器**：bare Chromium headless 被 PDD 检测，需要 `invisible_playwright`（C++ 级修补的 Firefox）
-- **需要 `_oak_rcto`**：URL 参数，来自搜索结果页跳转，不在 cookie 中
-
----
-
-## 6. 文件清单
-
+```text
+request URL / request sequence
+csr_risk_token
+该 request config 的 key/iv
+对应 response 的 encrypt_info
 ```
+
+## 9. 文件导航
+
+```text
 pdd-crypto-analysis/
-├── README.md                       # 本文档
-├── AES_REVERSE_NOTES.md            # AES 逆向最终结论
-├── INVESTIGATION_STATUS.md         # 调查历程与状态
+├── README.md
+├── AES_REVERSE_NOTES.md
+├── INVESTIGATION_STATUS.md
+├── raw/
+│   └── bytecodes_b64.txt
 ├── scripts/
-│   ├── aes_response.js             # ★ AES 解密 + zlib + transport 核心
-│   ├── anti_content.js             # ★ anti_content Node.js 生成
-│   ├── capture_key.py              # ★ invisible_playwright 自动捕获 key
-│   ├── generate_request.js         # ★ 一键请求管线
-│   ├── encryptToken.js             # RSA 加密 + 解密 wrapper
-│   ├── key_discovery.js            # 18 种密钥策略测试
-│   ├── keygen.js                   # 密钥生成器（反编译实现）
-│   ├── disasm.js                   # Rre VM 字节码反汇编器
-│   ├── analyze_encrypt_info.js     # encrypt_info 格式分析
-│   ├── verify_aes_fixture.js       # 线格式验证
-│   └── test_aes_tools.js           # AES 工具集成测试
-├── tools/
-│   └── pdd_crypto_hook.user.js     # 油猴脚本（方法 A 核心）
-└── raw/                            # JS bundle 文件（需自行获取）
-    └── react_anti_co_*.js          # anti_content chunk（~100KB）
+│   ├── keygen.js                 # Qre P2-P7 可读实现
+│   ├── vm_keygen_oracle.js       # 直接执行原字节码的差分 oracle
+│   ├── test_keygen.js            # golden vector / RSA 顺序测试
+│   ├── disasm.js                 # 修正后的 Qre 反汇编器
+│   ├── encryptToken.js           # iv + key RSA 包装
+│   ├── aes_response.js           # marker + AES + optional zlib
+│   ├── verify_aes_fixture.js
+│   ├── test_aes_tools.js
+│   ├── anti_content.js
+│   ├── generate_request.js
+│   └── capture_key.py
+└── tools/
+    └── pdd_crypto_hook.user.js
 ```
+
+`react_goods_*.js` 和 `react_anti_co_*.js` 体积较大并被 Git 忽略；提交的 `bytecodes_b64.txt`、oracle 和 golden vector 足以离线复核 key/IV 算法。

@@ -1,114 +1,185 @@
-# AES 逆向最终报告
+# Qre 加密与响应解密最终记录
 
-## 解密管线结论
+> 样本：`react_goods_c6c457883e861343f681_1026.js`
+> 修订日期：2026-07-16
 
-**完整解密管线**（已完全攻克）：
-```
-encrypt_info → 剥 transport_prefix+suffix → base64url decode
-    → AES-256-CBC 解密 (key: 32B UTF-8, iv: 16B UTF-8, PKCS7)
-    → zlib.inflate 解压 → JSON.parse → 商品数据
-```
+## 1. 协议摘要
 
-**encrypt_info 传输格式**：
-```
-encrypt_info = <prefix> + <base64url_ciphertext> + <suffix>
-```
-prefix+suffix 保证 core base64url 长度 % 4 == 0。常见 (6,2) 或 (0,1)。部分响应 core 尾部含 `==` 填充。
+```text
+key = Qre P6，32 字符 UTF-8
+iv  = Qre P7，16 字符 UTF-8
 
----
+csr_risk_token = RSA-2048 PKCS#1 v1.5 (iv + key)
 
-## 密钥研究
-
-### key/iv 格式
-
-通过 Rre VM 字节码反编译（960 bytes, 50+ opcodes, 10 个程序）确认：
-
-- **key** (程序 6)：`"v2" + Date.now() + counter + random_base64url` = 32 chars
-- **iv** (程序 7)：`SHA256(nanoid() + "iv").toString()[0:16]` = 16 chars
-
-浏览器捕获样本验证过格式：
-```
-key: <REDACTED_32_CHAR_KEY>  (32 chars)
-iv:  <REDACTED_16_CHAR_IV>   (16 chars)
+encrypt_info = base64url(AES-256-CBC ciphertext) + compression_marker
 ```
 
-### 独立密钥生成 — 不可行
+响应解密：
 
-| 尝试 | 方法 | 结果 |
-|---|---|---|
-| 1 | 模拟 Xre() → alphanumeric randomString | encrypt_status:3，bad decrypt |
-| 2 | key = base64url(random bytes) | 同上 |
-| 3 | key = v2 + Date.now() + random | 同上 |
-| 4 | key = v2 + Date.now() + counter + random | 同上 |
-| 5 | 18 种密钥推导策略（MD5/SHA/HMAC/PBKDF2 等） | 全部 bad decrypt |
-| 6 | PKCS1 v1.5 + 浏览器真实 key 发送 | encrypt_status:3，bad decrypt |
-| 7 | OAEP-SHA256 + 浏览器真实 key 发送 | no encrypt_info（拒绝） |
-| 8 | 遍历 node_modules 找 PDD 的 nanoid 实现 | 使用不同 alphabet，无帮助 |
+```text
+encrypt_info.slice(0, -1)
+    → Base64URL decode（padding 可省略）
+    → AES-256-CBC / PKCS7
+    → marker === "1" 时 zlib.inflate
+    → UTF-8
+    → JSON.parse
+```
 
-**结论**：RSA 加密正确（PKCS1 v1.5），服务端接受 token 返回 encrypt_status:3，但使用独立密钥派生逻辑，不直接使用 csr_risk_token 中的 key/IV。无法从客户端静态分析。
+## 2. key 生成
 
-### key/iv 捕获方案
-
-成功方案：`Object.prototype` setter trap 拦截 `_encryptionKeys` 赋值：
+Qre Program 6：
 
 ```javascript
-Object.defineProperty(Object.prototype, '_encryptionKeys', {
-    set: function(val) {
-        if (val && val.key) window.__pdd_keys = { key: val.key, iv: val.iv };
-        Object.defineProperty(this, '_encryptionKeys',
-            { value: val, writable: true, enumerable: true, configurable: true });
-    },
-    get: function() { return undefined; },
-    configurable: true, enumerable: false
-});
+timestamp = Date.now().toString();
+count = (localStorage.getItem('rs_count') || '000').padStart(3, '0');
+previous = localStorage.getItem('rs_key') || '';
+previousTail = previous ? previous.slice(-5) : '';
+
+base = 'v2' + timestamp + previousTail + count;
+key = base + nanoid(Math.max(0, 32 - base.length));
+
+localStorage.setItem('rs_key', timestamp);
+next = parseInt(count) + 1;
+localStorage.setItem('rs_count', String(next > 999 ? 0 : next).padStart(3, '0'));
 ```
 
-### key/iv 复用
+### nanoid 细节
 
-同一页面会话内，`_encryptionKeys` 设置一次后所有 render 请求共用。已验证跨商品复用。
+```javascript
+alphabet = 'useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict';
+bytes = crypto.getRandomValues(new Uint8Array(size));
 
----
+while (size--) {
+  output += alphabet[bytes[size] & 63];
+}
+```
 
-## 浏览器自动化研究
+- 随机字节倒序消费。
+- 使用 `byte & 63`。
+- 首次空状态通常补 14 字符；已有 `rs_key` 时通常补 9 字符。
+- `rs_count` 当前值先进入 key，之后才递增；`999` 使用后回卷到 `000`。
 
-| 方案 | 结果 | 原因 |
-|---|---|---|
-| Playwright Chromium headless + bare URL | JS bundle 加载但 React 不挂载 | PDD 检测 headless |
-| Playwright + stealth.min.js 注入 | 同上 | stealth 仅 JS 层面，不够 |
-| Playwright + `navigator.webdriver=false` | 同上 | PDD 检测更底层 |
-| Playwright Chromium + 完整 URL (`_oak_rcto`) | 同上 | 非 URL 问题，是浏览器指纹 |
-| **invisible_playwright** (C++ 修补 Firefox) + bare URL | React 加载但不触发 API | 缺少 `_oak_rcto` |
-| **invisible_playwright + `_oak_rcto`** | **✅ 成功** | 真实浏览器指纹 + 正确 URL |
-| `Object.prototype` trap 在 invisible_playwright | **✅ 捕获 key/iv** | |
-| `JSON.stringify` hook | ❌ 失败 | 时序问题：webpack 捕获了原始引用 |
-| `fetch init._encryptionKeys` hook | ❌ 失败 | key 在 body 对象上，不在 init 上 |
-| `page.route` 拦截网络层 | ✅ 捕获 csr_token + encrypt_info | |
-| 内存深度搜索 _encryptionKeys | ❌ 失败 | key 仅在闭包局部变量中 |
+## 3. IV 生成
 
----
+Qre Program 7：
 
-## RSA 加密验证
+```javascript
+iv = SHA256(Date.now().toString() + 'iv')
+  .toString()
+  .substring(0, 16);
+```
 
-| 测试 | padding | plaintext | 结果 |
-|---|---|---|---|
-| PKCS1 v1.5 | RSA_PKCS1_PADDING | key + iv (48B UTF-8) | encrypt_status:3, bad decrypt |
-| OAEP-SHA256 | RSA_PKCS1_OAEP_PADDING | key + iv | no encrypt_info |
-| PKCS1 key only | RSA_PKCS1_PADDING | key (32B) | no encrypt_info |
-| PKCS1 空 iv | RSA_PKCS1_PADDING | key + "" | no encrypt_info |
+这里的 `toString()` 是 CryptoJS WordArray 的十六进制输出。IV 与 nanoid 无关。
 
-服务端严格验证 token 格式：需要 PKCS1 v1.5 加密的 48 字节明文。
+## 4. RSA 包装顺序
 
----
+Qre Program 0 的关键栈序列：
 
-## 工具链
+```text
+generateAESKey → store key
+generateIV     → DUP → store iv      # 栈上仍保留 iv
+load key
+ADD                                 # iv + key
+rsaEncrypt
+```
 
-| 工具 | 功能 | 状态 |
-|---|---|---|
-| `scripts/aes_response.js` | 完整解密管线 | ✅ |
-| `scripts/anti_content.js` | Node.js 独立生成 anti_content | ✅ |
-| `scripts/capture_key.py` | invisible_playwright 自动捕获 | ✅ |
-| `scripts/generate_request.js` | 独立发送请求 | ✅ (需外部 key/iv) |
-| `scripts/key_discovery.js` | 18 种策略测试 | ✅ (全部失败，确认为不可行路径) |
-| `scripts/disasm.js` | Rre VM 反汇编 | ✅ 分析用 |
-| `scripts/keygen.js` | 密钥生成器 | ⚠️ 格式正确但不匹配服务端 |
-| `tools/pdd_crypto_hook.user.js` | 油猴脚本 | ✅ |
+因此：
+
+```javascript
+plaintext = iv + key; // 16 + 32 = 48 bytes
+```
+
+Qre Program 8 使用 bundle 内 JSEncrypt 公钥和 PKCS#1 v1.5 padding，输出标准 Base64。
+
+## 5. 响应 wire format
+
+Qre Program 1 的开头等价于：
+
+```javascript
+const compressed = encryptInfo.slice(-1) === '1';
+const core = encryptInfo.slice(0, -1);
+```
+
+随后：
+
+```javascript
+const ciphertext = base64urlDecode(core);
+const plaintext = AES.decrypt(
+  { ciphertext },
+  CryptoJS.enc.Utf8.parse(key),
+  {
+    iv: CryptoJS.enc.Utf8.parse(iv),
+    mode: CryptoJS.mode.CBC,
+    padding: CryptoJS.pad.Pkcs7,
+  }
+);
+```
+
+`compressed` 为真时才调用 inflate。当前 VM 中没有可变前缀扫描，也没有 `(6,2)` transport 边界。
+
+## 6. 旧实验为何产生 bad decrypt
+
+| 旧现象 | 根因 |
+|---|---|
+| 自生成 token 返回 `encrypt_status:3`，本地解密失败 | 旧脚本使用 `key + iv`；服务端按前 16 字节 IV、后 32 字节 key 读取，得到另一组材料 |
+| 浏览器 key/IV 重新包装后仍失败 | 重新包装继续沿用错误顺序 |
+| 合法无 padding Base64URL 被解析器排除 | 旧解析器枚举 prefix/suffix，并要求 core 长度 `% 4 === 0` |
+| 捕获值似乎跨请求复用 | 捕获器只保存最后一次赋值，存在请求与 key/IV 错配窗口 |
+| 近似 keygen 只匹配格式 | 时间戳前序状态、三位计数器、nanoid 与 IV 来源均有误 |
+
+这些旧结果不再支持“服务端另行派生响应密钥”的推断。静态 Axios 调用链显示响应拦截器使用同一请求的 `config._encryptionKeys.key/iv`；一次性原 Program 1 动态探针另行确认了 marker/AES 解码语义。
+
+## 7. 差分验证
+
+`scripts/test_keygen.js` 使用固定时间和固定随机字节，分别执行：
+
+1. `scripts/keygen.js` 的可读实现。
+2. `scripts/vm_keygen_oracle.js` 对提交 fixture 中的 P0/P2-P7 相关程序直接解释执行。
+
+固定向量：
+
+```text
+key timestamp = 1700000000000
+iv timestamp  = 1700000000001
+random bytes  = 00 01 02 ...
+
+key = v2170000000000000091T62-modnaesu
+iv  = 93734a7fb72105df
+RSA oracle plaintext = 93734a7fb72105dfv2170000000000000091T62-modnaesu
+```
+
+`npm test` 合并覆盖：
+
+- 空 localStorage。
+- 已有 `rs_key` / `rs_count`。
+- `999 → 000` 回卷。
+- `iv + key` RSA 顺序。
+- 压缩 marker `1`。
+- 未压缩 marker `0`。
+- 无 Base64 padding 的 ciphertext。
+
+执行：
+
+```powershell
+npm test
+```
+
+## 8. 当前工具状态
+
+| 工具 | 当前用途 |
+|---|---|
+| `scripts/keygen.js` | Qre P2-P7 的可读实现 |
+| `scripts/vm_keygen_oracle.js` | 直接执行原始 key/IV 字节码 |
+| `scripts/test_keygen.js` | golden vector、状态和 RSA 顺序测试 |
+| `scripts/disasm.js` | 精确 U16 操作数反汇编 |
+| `scripts/encryptToken.js` | `iv + key` RSA 包装 |
+| `scripts/aes_response.js` | marker、Base64URL、AES、可选 zlib |
+| `scripts/generate_request.js` | 生成请求并尝试解密响应 |
+| `scripts/key_discovery.js` | 保留的历史排查工具，不再代表当前主结论 |
+
+## 9. 版本边界
+
+- 结论对应文件名所示 bundle 样本；bundle 更新后应重新检查 Qre 元数据、公钥和拦截器。
+- 仓库尚缺一个脱敏真实响应 fixture，当前真实样本分支仍显示 SKIP。
+- 当前修改已完成 bundle/字节码级验证；实时请求还需用同版本上下文复核。
+- 每个加密 POST 都生成新 key/IV，采集时必须按请求配对，不能取全局最后值代替。

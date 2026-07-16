@@ -103,17 +103,6 @@ function generateAntiContent() {
 
 module.exports = { generateAntiContent };
 
-if (require.main === module) {
-    try {
-        process.stdout.write(generateAntiContent());
-    } catch (e) {
-        console.error('Error:', e.message);
-        process.exit(1);
-    }
-}
-
-module.exports = { generateAntiContent };
-
 // CLI: print anti_content to stdout
 if (require.main === module) {
     try {
