@@ -2,18 +2,18 @@
 
 > 样本族：`js_security_v3_0.1.4.js`  
 > 固定构建：官方 CDN 的 2026-05-27 Wayback 快照及其公开可读衍生样本  
-> 本文核验日期：2026-07-16
+> 本文核验日期：2026-07-16（A4 纯算切片续写于同日）
 
-本文记录从固定 JavaScript 构建中恢复字符串表、整数编码流、34 个栈式 dispatcher、控制流图，以及把最终编排入口 `_$fP.prototype._$sdnmd` 移植到 Python 的过程。文中的“解码”分为三层：字符串去混淆、VM 控制流反编译、h5st 载荷分析。三层的完成范围分别列出，避免把静态识别等同于载荷明文恢复。
+本文记录从固定 JavaScript 构建中恢复字符串表、整数编码流、34 个栈式 dispatcher、控制流图，以及把最终编排入口 `_$fP.prototype._$sdnmd` 移植到 Python 的过程。文中的“解码”分为三层：字符串去混淆、VM 控制流反编译、h5st 载荷与魔改哈希分析。三层的完成范围分别列出，避免把静态识别等同于载荷明文恢复，也避免把 MD5/SHA256 预处理还原等同于完整十段纯算。
 
 ## 1. 证据等级与当前结论
 
 | 等级 | 定义 | 本文示例 |
 |---|---|---|
-| **E3 · 自动复现** | 当前仓库有固定输入、断言和通过的自动测试 | 374 项字符串表、5209 个编码单元、34 个 dispatcher、入口 5134 的 Python/JavaScript 差分 |
-| **E2 · 字节或行为吻合** | 来源哈希、数组逐项比对或固定环境中的人工差分已核验 | Wayback 官方快照与公开可读样本的数组一致；十段 fixture 的单字符差分 |
-| **E1 · 静态推断** | 由函数名、原语或数据流推断，尚缺独立明文/密文金标 | 各 h5st 段的密码学职责、环境载荷内部格式 |
-| **E0 · 当前边界** | 当前仓库尚未覆盖的执行范围 | 其余 33 个 dispatcher 的纯 Python 执行、Part 8 明文恢复 |
+| **E3 · 自动复现** | 当前仓库有固定输入、断言和通过的自动测试 | 374 项字符串表、5209 个编码单元、34 个 dispatcher、入口 5134 的 Python/JavaScript 差分、魔改 MD5/SHA256 纯算向量 |
+| **E2 · 字节或行为吻合** | 来源哈希、数组逐项比对或固定环境中的人工差分已核验 | Wayback 官方快照与公开可读样本的数组一致；十段 fixture 的单字符差分；Node 跟踪下的 `_$atm`/`_$gdk` 调用序 |
+| **E1 · 静态推断** | 由函数名、原语或数据流推断，尚缺独立明文/密文金标 | 各 h5st 段的密码学职责细节、环境载荷内部格式、genKey 表达式中的 `"54"`/`jid+hR` 字面来源 |
+| **E0 · 当前边界** | 当前仓库尚未覆盖的执行范围 | 其余 33 个 dispatcher 的纯 Python 执行；有 storage 时的 pLabel/canvas/WebGL 采集路径（空 storage 默认已钉死） |
 
 ### 1.1 状态摘要
 
@@ -22,10 +22,15 @@
 - **E3：完整离线签名运行** `utils/h5st_runtime.py` 通过 Python `quickjs==1.19.4` 扩展在进程内执行固定官方 VM；无需 Node 子进程，全流程使用确定性 shim 且零网络。
 - **E3：可执行移植** 最终入口 5134，覆盖 33 个 case、62 条可达指令和 75 个尾部编码单元。
 - **E3：差分测试** Python 入口 5134 与固定 JavaScript dispatcher 返回值、调用顺序完全一致。
-- **E0：全部 dispatcher 原生 Python 化** 入口 5134 调用的 `_$cps`、`_$rds`、`_$clt`、`_$ms` 仍作为宿主方法注入；其余 33 个 dispatcher 由嵌入式官方 QuickJS VM 执行。
-- **E0：载荷明文恢复** 当前实现生成并比较十段 h5st，但没有把第 8 段还原为独立可验证的明文对象。
+- **E3：魔改哈希与签名切片纯算** `utils/jd_crypto.py`：seData/eData、MD5/SHA256、HMAC/`local_key_3`（双 seData + eKey）、genKey、part5/9、`encode`/part10、fingerprint、defaultToken、part8 env。
+- **E3：无厂商 JS 十段** `h5st_native.generate_h5st(app_id, params, now_ms=, seed=)` 在 browser_shim 环境下与 golden 逐字一致（共享 PRNG：warmup→fp→clt→token）。
+- **E2：签名主路径跟踪** `utils/h5st_trace.js` + `tests/fixtures/golden_trace.json` 固定 `_$cps→…→_$gsp` 方法序与关键中间值。
+- **E0：全部 dispatcher 原生 Python 化** 入口 5134 调用的宿主方法在 A2 路径仍注入；其余 33 个 dispatcher 由嵌入式官方 QuickJS VM 执行（A4 已绕过，不依赖这些 handler）。
 
-因此，方案 A 当前准确表述是：**静态提取与全部 CFG 已完成，Python API 已通过进程内 QuickJS 完成端到端离线签名，最终编排 dispatcher 已另行完成原生 Python 移植；尚未把其余 33 个 dispatcher 全部改写成原生 Python handler。**
+因此，方案 A 当前准确表述是：
+
+- **A1–A3：** 静态提取与全部 CFG 已完成；Python API 已通过进程内 QuickJS 完成端到端离线签名；最终编排 dispatcher 已另行完成原生 Python 移植；尚未把其余 33 个 dispatcher 全部改写成原生 Python handler。
+- **A4：** 在本构建 + browser_shim 下已完成脱离厂商 JS 的纯 Python 十段签名；换宿主时 part8 静态字段需覆盖。
 
 ## 2. 构建溯源与哈希
 
@@ -114,7 +119,7 @@ flowchart TD
 ```text
 jd_h5st_research_report/
 ├── archives/
-│   ├── js_security_v3_0.1.4_20260527205706.js # 官方历史快照/运行金标
+│   ├── js_security_v3_0.1.4_20260527205706.js # 官方历史快照/运行金标（LF SHA256 见第 2 节）
 │   ├── js_security_v3_0.1.4_cc4cf49.js  # 固定可读样本
 │   ├── h5st_string_table.json           # 374 项完整字符串表
 │   ├── h5st_bytecode.json               # 5209 个整数编码单元
@@ -123,15 +128,20 @@ jd_h5st_research_report/
 ├── utils/
 │   ├── vm_bundle.py                     # 完整提取器
 │   ├── vm_decompiler.py                 # CFG 驱动反汇编器
-│   ├── h5st_runtime.py                  # Python + QuickJS 完整离线运行时
-│   ├── h5st_vm.py                       # 入口 5134 Python 运行时
+│   ├── h5st_runtime.py                  # Python + QuickJS 完整离线运行时（A2）
+│   ├── h5st_vm.py                       # 入口 5134 Python 运行时（A3）
+│   ├── jd_crypto.py                     # 魔改 MD5/SHA256 纯算（A4）
+│   ├── h5st_native.py                   # 无厂商 JS 脚手架（A4）
+│   ├── h5st_trace.js                    # Node 中间态跟踪（A4）
 │   ├── browser_shim.js                  # 固定时钟、随机数和浏览器宿主
 │   └── h5st_generator.js                # 固定 JavaScript 构建执行 oracle
 └── tests/
     ├── fixtures/golden_h5st.json        # QuickJS 十段逐字金标
+    ├── fixtures/golden_trace.json       # Node 中间态跟踪金标
     ├── fixtures/final_vm.json
     ├── js/final_vm_reference.js
     ├── test_runtime.py
+    ├── test_native_crypto.py
     └── test_vm.py
 ```
 
@@ -269,13 +279,17 @@ flowchart LR
     A["官方固定 JS 源码"] --> B["vm_bundle.py"]
     B --> C["manifest + arrays + 34 dispatcher 元数据"]
     C --> D["vm_decompiler.py：全部 CFG"]
-    C --> E["h5st_vm.py：入口 5134"]
-    A --> Q["h5st_runtime.py：进程内 QuickJS"]
+    C --> E["h5st_vm.py：入口 5134 A3"]
+    A --> Q["h5st_runtime.py：进程内 QuickJS A2"]
     F["browser_shim.js"] --> Q
     F --> G["h5st_generator.js：V8 oracle"]
+    F --> T["h5st_trace.js：中间态 A4"]
     A --> G
+    A --> T
     Q --> R["Python API 十段结果"]
     R --> S["golden_h5st.json 逐字断言"]
+    T --> U["golden_trace.json"]
+    U --> V["jd_crypto / h5st_native A4"]
     E --> H["Python fixture 结果"]
     G --> I["JavaScript fixture 结果"]
     H --> J["差分断言"]
@@ -479,9 +493,55 @@ HmacSHA256
 HmacMD5
 ```
 
-存在这些实现只证明构建具备相应原语。把某个原语指定给 h5st 某一段，还需要沿 dispatcher 调用链恢复输入、key、编码器和输出去向。
+`ParamsSign` 默认算法表将 `local_key_1/2/3` 分别绑到 MD5、SHA256、HmacSHA256 辅助函数。存在这些实现只证明构建具备相应原语；把某个原语指定给 h5st 某一段，还需要沿 dispatcher 调用链恢复输入、key、编码器和输出去向。
 
-### 9.2 已完成的解码层
+### 9.2 魔改哈希预处理（A4 · 已纯算）
+
+**E3 · `jd_crypto.py` / `test_native_crypto.py`**
+
+对本构建的单次 MD5/SHA256 **字符串**输入：
+
+1. **seData（入口 199 `_seData1` 语义）**  
+   - 字符表：`nmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA-_9876543210zyxwvutsrqpo`（64 字符）  
+   - `segments = 6`，`multiplier = 28`  
+   - `segmentLength = floor(len / 6)`；前 5 段长度均为 `segmentLength`，末段吃到字符串结尾  
+   - 每段对 `charCode` 求和，取 `alphabet[(sum * 28) % 64]`，6 个映射字符拼到明文后  
+2. **eData（入口 181 语义，经入口 131 `_append` 字符串分支）**  
+   - 再追加固定盐：`RvI<7|`  
+3. 对结果的 **latin-1 字节** 做标准 MD5 或 SHA256（IV 与压缩函数未改）。
+
+空串不进入 seData，摘要与标准空输入一致。WordArray 路径（已是二进制块）不走上述字符串预处理；这与“`MD5(WordArray('hello'))` 等于标准 MD5”的探测一致。
+
+**E3 · HmacSHA256 / `local_key_3`**
+
+本构建规则（已纯算）：message = `seData(seData(msg)) + salt`；key = `eKey(key)`（仅变换前 min(2,len) 字符，逆序 pop 仿射）；再标准 HMAC-SHA256。`hmac_sha256_vendor_gap` 现为该实现的别名。
+
+默认 local-token 路径上（`golden_trace.json`）：
+
+- `_$atm("local_key_3", material, token)` 调用两次；  
+- 首轮 `material` 观测为  
+  `token + fingerprint + timeStr + "54" + appId + "jid+hR"`；  
+- 次轮 message 为上一轮 64 位十六进制输出，key 仍为 token。
+
+### 9.3 签名主路径跟踪（A4 · E2/E3）
+
+**E3 · `h5st_trace.js` / `golden_trace.json` 方法序**
+
+```text
+_$cps → _$pam → _$rds → _$clt → _$atm → _$atm → _$gdk → _$gs → _$gsd → _$gsp → _$ms → _$sdnmd
+```
+
+| 方法 | 观测职责 |
+|---|---|
+| `_$cps` | 参数排序为 `[{key,value}, ...]` |
+| `_$rds` | fingerprint；可选 token/algo 缓存 |
+| `_$clt` | 产出第 8 段环境载荷 |
+| `_$gdk` / `_$atm` | 派生业务 key |
+| `_$gs` | 第 5 段 |
+| `_$gsd` | 第 9 段 |
+| `_$gsp` | 十段拼接；第 10 段在调用前已算好 |
+
+### 9.4 已完成的解码层
 
 | 层 | 状态 | 验证方式 |
 |---|---|---|
@@ -491,17 +551,84 @@ HmacMD5
 | 最终 dispatcher 执行 | E3 | Python 与原 JavaScript 差分一致 |
 | Python API 十段 h5st 离线生成 | E3 | 进程内 QuickJS、官方固定源码、golden fixture 逐字断言 |
 | Node/V8 与 QuickJS 引擎差分 | E3 | 段 1–7、9–10 相同；段 8 等长且单字符不同 |
-| 第 8 段独立明文恢复 | E0 | 当前仓库没有明文 fixture 与逆变换实现 |
+| seData + eData + MD5/SHA256 纯算 | E3 | `test_native_crypto.py` 向量 |
+| 签名主路径中间态跟踪 | E3 | `golden_trace.json` / 跟踪冒烟 |
+| HmacSHA256 / local_key_3 纯算 | E3 | 双 seData + eKey + 标准 HMAC；genKey/part5/9 对齐 golden |
+| fingerprint / defaultToken | E3 | `_$YX` / `_$YE`；共享 PRNG 在 clt 之后取 token |
+| 第 8 段明文 + encode | E3 | `JSON.stringify(env,null,2)` + 与 part10 相同 `encode`；动态 `Y8(11)`/`Y8(10)` |
+| 无厂商 JS 的完整十段生成 | E3 | `h5st_native.generate_h5st` 无注入对齐 golden |
 | 全部 34 个 dispatcher 原生 Python 执行 | E0 | 原生解释器执行入口 5134；其余入口已有完整 CFG，并由嵌入式 QuickJS 执行 |
 
-### 9.3 第 8 段的分析原则
+### 9.5 第 8 段（part8 / `_$clt`）
 
-第 8 段包含大量重复字形，静态源码也包含多种密码学及编码组件；这些现象可以指导数据流追踪，但尚不足以单独确认 AES 模式、key/IV 或自定义替换层。后续恢复应至少加入：
+第 8 段**不是**独立 AES 密文，而是 vendor `encode`（与 part10 同算法）作用于 pretty 环境 JSON：
 
-1. 同一构建的固定明文环境对象；
-2. 加密前、编码前、最终段三个观察点；
-3. key、IV、padding、字符集和序列化顺序；
-4. 正向输出金标与逆向明文金标；
+```text
+part8 = encode(JSON.stringify(env, null, 2))
+```
+
+固定 seed / shim 下明文结构（动态字段标 `*`）：
+
+```json
+{
+  "sua": "Windows NT 10.0; Win64; x64",
+  "pp": {},
+  "extend": { "...statics...", "random": "*Y8(11)*", "bu12": -8, "bu10": 14, "bu11": 3 },
+  "pf": "Win32",
+  "random": "*Y8(10)*",
+  "v": "h5_file_v5.3.4",
+  "bu4": "0",
+  "webglFp": "",
+  "ccn": 8,
+  "bu14": "VRAEjxVEtV",
+  "t": "*now_ms*",
+  "fp": "*fingerprint*"
+}
+```
+
+共享 PRNG 顺序：`warmup(1) → fp(24) → clt Y8(11)+Y8(10) → token Y8(32)+4floor+Y8(12)`。
+
+**`bu14` 来源（已钉死）：** 不是 canvas。`_$fT` 收集器把 `bu14` 设为  
+`__JDWEBSIGNHELPER_$DATA__['main.sign#__data'].pLabel`。  
+读取 token 时：`pLabel = valid(WQ_dy1_pFlag) ? pFlag.v : fF(0x2c4)`，而 `fF(0x2c4) === "VRAEjxVEtV"`。  
+空 storage（shim / 冷启动）故 part8 恒为该默认字面量。有行为标记时覆盖为 `pFlag.v`（`resolve_plabel`）。
+
+**canvas 字段（已钉死）：** 可读样本 `_$Yo` 在 2d canvas 上绘制（红矩形、弧线、两段 `fillText` 含 `☠`/`No骗` 等）后：
+
+```text
+canvas_fp = hex( MD5_std( canvas.toDataURL() ) )
+storage WQ_gather_cv1 = { v: canvas_fp, t: now, e: 0x1e13380 }
+```
+
+官方运行时观测为**标准 MD5**（非 seData 魔改 MD5）对 `toDataURL()` 原文。shim 下 `getContext` 返回 null → 收集抛错 → part8 **无** `canvas` 键（golden）。有 canvas 时键序为 `… bu4, canvas, webglFp, ccn, bu14 …`。
+
+**webglFp（已钉死为 storage-only）：**  
+本 pinned `js_security` **只读** `WQ_gather_wgl1`（`_$YB.WEBGL_FP`），**从不写入**。  
+空 storage → `""`（golden）。写入 envelope 形如  
+`{"v":"<fp>","t":<now>,"e":31536000}`（与 canvas 缓存同形；`pack_env_storage` / `webgl_fp_from_storage`）。  
+CDN `js-security-v3-rac.js` 为密文包，明文中无 webgl 符号——WebGL **绘制/哈希**不在本构建内。
+
+**extend 检测位（差分，Node+shim）：**
+
+| 信号 | 字段变化 |
+|---|---|
+| `navigator.webdriver=true` | `wd: 1` |
+| `plugins.length=N` | `ls: N`（观测） |
+| `callPhantom` / `_phantom` | `wk: 80`（默认 64） |
+| `Cypress` / `__Cypress__` | `bu5 \|= 0x20`（如 4→36） |
+| golden fixture | `bu4=0, bu5=0`（live 裸 Node 可能 `bu4=1`） |
+
+`infer_extend_statics(...)` 编码上述已知映射；完整 `_$f8` VM 位定义仍可继续静态还原。
+
+**part1 时间偏移（已钉死）：** 可读样本 `_$Y6`：
+
+```js
+_$fQ += 0xff * -0x25 + -0x15eb + 0x4e4e; // === 5000
+var _$fG = new Date(_$fQ);
+// format pattern yyyyMMddhhmmssSSS
+```
+
+part7 仍写入未加偏的 `Date.now()`。纯算常量 `PART1_MS_OFFSET = 5000`。
 5. 修改单字段后的逐字差分。
 
 在这些证据齐备前，本文把第 8 段称为“环境/扩展载荷”，把 64 位段称为“十六进制值”，避免提前绑定具体算法。
@@ -572,23 +699,39 @@ python jd_h5st_research_report/utils/h5st_vm.py
 .\.venv\Scripts\python -m unittest discover -s jd_h5st_research_report/tests -p "test_*.py" -v
 ```
 
-安装 QuickJS 依赖和 Node.js 时，期望 12 项通过：
+分模块期望：
 
-```text
-Ran 12 tests
-OK
-```
+| 模块 | 说明 |
+|---|---|
+| `test_native_crypto.py` | 不依赖官方源码字节哈希时即可跑通；期望 **9** 项 OK（Node 跟踪冒烟在无 `node` 时 skip） |
+| `test_vm.py` / `test_runtime.py` | 要求官方快照为 **LF** 金标 SHA256 `78ff7115…`；CRLF 检出会导致 asset mismatch。安装 `quickjs` 且 Node 可用时，A1/A2/A3 相关用例应全部通过 |
 
 测试覆盖：
 
-1. 官方与可读源码 SHA256及逐项相同的提取结果；
+1. 官方与可读源码 SHA256 及逐项相同的提取结果；
 2. 未登记或损坏的源码快速拒绝；
 3. 数组与已提交资产逐项一致；
 4. 34 个 dispatcher 都有有效 CFG；
 5. 原生 Python 入口 5134 的固定结果及 JavaScript 差分；
 6. Python/QuickJS 完整十段 golden fixture；
 7. 固定时钟和 PRNG 的逐字确定性；
-8. Node/V8 与 Python/QuickJS 已知单字符边界。
+8. Node/V8 与 Python/QuickJS 已知单字符边界；
+9. 魔改 seData/eData + MD5/SHA256 纯算向量；
+10. `h5st_trace.js` golden 跟踪冒烟与 native 脚手架边界。
+
+### 10.5.1 Node 中间态跟踪与纯算分析
+
+```powershell
+node jd_h5st_research_report/utils/h5st_trace.js --golden
+.\.venv\Scripts\python jd_h5st_research_report/utils/h5st_native.py `
+  --app-id 586ae `
+  --params '{"functionId":"unionSearchGoods","appid":"unionpc","body":"4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"}' `
+  --now-ms 1784168130123 `
+  --seed 305419896 `
+  --analyze-only --pretty
+```
+
+跟踪 JSON 应含 `method_order`、`calls`、`h5st.parts`；`--analyze-only` 打印已还原的排序参数、时间串与哈希样例，**不**输出完整 h5st。
 
 ### 10.6 获取并核验官方历史快照
 
@@ -640,18 +783,22 @@ SHA256 : 78FF71158C7DC6284A0AB381370BE33BC8FB8FD7F25571745330848EB766C331
 | 字符串索引越界 | 当前 dispatcher 的 `string_base` 是否正确 |
 | Python/JS 调用顺序不同 | `this` 绑定、null/undefined、call 参数个数、Date.now 注入 |
 | 十段 fixture 只在第 8 段变化 | 先比对 shim、随机序列与环境序列化；保留官方/可读版单字符边界 |
+| official source SHA256 mismatch | 是否被 Git 转成 CRLF；金标为 LF `78ff7115…`（约 236108 B） |
+| 纯算 MD5/SHA256 与 VM 不一致 | 是否漏做 seData 分段或 eData 盐；空串是否误走预处理 |
+| 纯算 token 对不上 | 是否在 fp 之后、token 之前消耗了 clt 的 21 次 `Y8`；expr body 应为 `Y8(32)[:5]` |
+| part8 对不上 | JSON 必须 `indent=2`；键序与 extend 字段是否与 shim 一致；`bu14` 是否需按宿主覆盖 |
 
 ## 12. 后续移植顺序
 
-基于最终入口的真实调用关系，建议按以下顺序扩展纯 Python 运行时：
+A4（本构建 + 空 storage 纯算十段）已闭合；canvas / pLabel / webgl storage / extend 差分 API 已提供。后续按需推进：
 
-1. `_$cps`：参数校验与规范化；
-2. `_$rds`：fingerprint、token、algo 缓存及本地/远程分支；
-3. `_$clt`：时间与环境字段采集；
-4. `_$ms`：主体签名和十段拼装；
-5. `_$gdk`、`_$pam`、`_$gsp`、`_$gs`、`_$gsd`：key、算法选择与数据变换；
-6. CryptoJS 和浏览器宿主绑定；
-7. 用官方历史 fixture 对十段逐字回归；
-8. 为漂移构建生成独立 manifest，而非复用旧 opcode 映射。
+1. **`_$f8` extend 全量位定义**  
+   完整还原 bu3–bu8 / ls / wk 与 document/navigator 探针的一一对应（目前为差分表 + golden 钉）。
+2. **外置 rac 解密**  
+   若需 WebGL **生成**算法，需单独解开 `js-security-v3-rac.js`（本构建不包含）。
+3. **其余 dispatcher 的 A3 原生化**  
+   仅在需要脱离 QuickJS 解释器时推进。
+4. **漂移构建**  
+   独立 manifest 与 fixture，禁止复用旧 opcode 映射或旧 seData 常量。
 
-每移植一个入口，都应同时提交：源码 hash、入口 PC、case 集合、CFG 数量、宿主依赖、固定输入输出和 JavaScript 差分。这样“静态已覆盖”与“Python 已执行”始终保持可审计的边界。
+每移植一个入口或哈希切片，都应同时提交：源码 hash、入口 PC、case 集合、CFG 数量、宿主依赖、固定输入输出、跟踪片段和 JavaScript/纯算差分。这样“静态已覆盖”“跟踪已钉死”“Python 已执行”始终保持可审计的边界。

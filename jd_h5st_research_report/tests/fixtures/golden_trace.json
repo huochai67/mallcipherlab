@@ -1,0 +1,876 @@
+{
+  "schema": 1,
+  "description": "Pinned h5st 5.3 intermediate trace for pure-Python reconstruction",
+  "source": "js_security_v3_0.1.4_20260527205706.js",
+  "input": {
+    "app_id": "586ae",
+    "params": {
+      "functionId": "unionSearchGoods",
+      "appid": "unionpc",
+      "body": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"
+    },
+    "options": {
+      "now_ms": 1784168130123,
+      "seed": 305419896
+    }
+  },
+  "result": {
+    "functionId": "unionSearchGoods",
+    "appid": "unionpc",
+    "body": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e",
+    "_stk": "appid,body,functionId",
+    "_ste": 1,
+    "h5st": "20260716101535123;yzzaj1ibb2pp2pp8;586ae;tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe;04afdd55323fef01294630ece1e61a7983b63c65b99151f9f9a4ac036bff5b7b;5.3;1784168130123;of7ruCLjzrkP5rkP5jFTCmIRKCENyipjxjpPFipjLDrg4jYf7fYfzTYf3L4e6rJdJbEjLrJp-jJW3WHWzCVaqiGWJrJdJbYf2iFjLrJp-LojxjJQIeFjLrJp-jJjLDIj7SnQEiVS0ipjLDrgJrIjLDIj3XETJrpjh7Jj3z5f9XIOMWlQCS1U2LFjLDIj1ipjLDrgJT4fyr2fdKIayOIjLDIj_ulS9mFPJrpjh7Jj5fIQCOGjLDIjFqEjLrJp-3kjLD7fLDIj6nYOJipjLrpjh7pe6rJdJrYf2iFjLrpjLDrgz3pjxjJf6XETJrpjLrJp-j5QfOUbzf4edGYbzjpjxjZQ8aFQKiEjLrpjLDrg6rJdJLYOJipjLrpjh7ZfLDIj0XETJrpjLrJp-nYgLDIj1XETJrpjLrJp-rojxjZe2iFjLrpjLDrg6rJdJbYOJipjLrpjh7Zf_rJdJfYOJipjLrpjh7Jj3zZf9rIjLDIj6XETJrpjLrJp-bIeLDIjAOEjLrpjLDrg63pjxj5P-ipjLrpjh7pfLDIj-ipjLrpjh7pfLDIjHOEjLrpjLD7NLDIjHyVS3KUSJrpjh7ZMwqJdJrkPJrpjh7Jj3ToNL-oe1zVRUq5d7zpf6rpWdq5P0ulS9G1WJrJdJnVO4ipjLD7N;eb83cbb6b359b4b0d821a17158a7254a4530c2547ced7e2140ded6d53bc8b6ab;of7rHGHQ8GlOIyVOF6ZNHuFT-bVR7qUT"
+  },
+  "h5st": {
+    "count": 10,
+    "lengths": [
+      17,
+      16,
+      5,
+      92,
+      64,
+      3,
+      13,
+      660,
+      64,
+      32
+    ],
+    "parts": [
+      {
+        "index": 1,
+        "length": 17,
+        "value": "20260716101535123",
+        "sha256": "b8e05ce5e1b41067af0536da6707f73f92e5aa5a7c2d59d2230ff02f7fdf629c"
+      },
+      {
+        "index": 2,
+        "length": 16,
+        "value": "yzzaj1ibb2pp2pp8",
+        "sha256": "eca6ffe26b63241302593792b5ca0839bd1ab4676b81b2e45cd2abde3bd325c4"
+      },
+      {
+        "index": 3,
+        "length": 5,
+        "value": "586ae",
+        "sha256": "e7ef9501194da2aa80cf640b9bf22b826733fd6fca08e12a5d99ec272d1f5784"
+      },
+      {
+        "index": 4,
+        "length": 92,
+        "value": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "sha256": "42f9959efdd19622860f93d7da2d55ee62ef72669a4128dfbae4837602318aeb"
+      },
+      {
+        "index": 5,
+        "length": 64,
+        "value": "04afdd55323fef01294630ece1e61a7983b63c65b99151f9f9a4ac036bff5b7b",
+        "sha256": "ae57fada35613e6e9e6eba3553ecd2e0eefd0016341b744d1c99b62aec9f893f"
+      },
+      {
+        "index": 6,
+        "length": 3,
+        "value": "5.3",
+        "sha256": "f54f1e8b9a3810596ef045f25d69c96911a0f3bf616071e97262ed9c55462aff"
+      },
+      {
+        "index": 7,
+        "length": 13,
+        "value": "1784168130123",
+        "sha256": "cfc36527b2a8c900db2cb3113171a624d1781b889af41d7c6b842b25d17ecaba"
+      },
+      {
+        "index": 8,
+        "length": 660,
+        "value": "of7ruCLjzrkP5rkP5jFTCmIRKCENyipjxjpPFipjLDrg4jYf7fYfzTYf3L4e6rJdJbEjLrJp-jJW3WHWzCVaqiGWJrJdJbYf2iFjLrJp-LojxjJQIeFjLrJp-jJjLDIj7SnQEiVS0ipjLDrgJrIjLDIj3XETJrpjh7Jj3z5f9XIOMWlQCS1U2LFjLDIj1ipjLDrgJT4fyr2fdKIayOIjLDIj_ulS9mFPJrpjh7Jj5fIQCOGjLDIjFqEjLrJp-3kjLD7fLDIj6nYOJipjLrpjh7pe6rJdJrYf2iFjLrpjLDrgz3pjxjJf6XETJrpjLrJp-j5QfOUbzf4edGYbzjpjxjZQ8aFQKiEjLrpjLDrg6rJdJLYOJipjLrpjh7ZfLDIj0XETJrpjLrJp-nYgLDIj1XETJrpjLrJp-rojxjZe2iFjLrpjLDrg6rJdJbYOJipjLrpjh7Zf_rJdJfYOJipjLrpjh7Jj3zZf9rIjLDIj6XETJrpjLrJp-bIeLDIjAOEjLrpjLDrg63pjxj5P-ipjLrpjh7pfLDIj-ipjLrpjh7pfLDIjHOEjLrpjLD7NLDIjHyVS3KUSJrpjh7ZMwqJdJrkPJrpjh7Jj3ToNL-oe1zVRUq5d7zpf6rpWdq5P0ulS9G1WJrJdJnVO4ipjLD7N",
+        "sha256": "fccd8406dab806266ca122541603cb058fce377ad1dd1099b3a17e5be8539d54"
+      },
+      {
+        "index": 9,
+        "length": 64,
+        "value": "eb83cbb6b359b4b0d821a17158a7254a4530c2547ced7e2140ded6d53bc8b6ab",
+        "sha256": "32b05b5dad65f436da3e8ac6ecc16cde821068d8f37ea89e375b4da59d7de04e"
+      },
+      {
+        "index": 10,
+        "length": 32,
+        "value": "of7rHGHQ8GlOIyVOF6ZNHuFT-bVR7qUT",
+        "sha256": "721062b84b181cdb7e858bf877352e743cb238cfef90e48f2fcf05e2a5e16a45"
+      }
+    ]
+  },
+  "final_signer_state": {
+    "appId": "586ae",
+    "version": "5.3",
+    "fingerprint": "yzzaj1ibb2pp2pp8",
+    "token": "",
+    "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+    "isNormal": false,
+    "genKey": null,
+    "defaultAlgorithmKeys": [
+      "local_key_1",
+      "local_key_2",
+      "local_key_3"
+    ],
+    "algoKeys": [
+      "MD5",
+      "SHA256",
+      "HmacSHA256",
+      "HmacMD5"
+    ]
+  },
+  "method_order": [
+    "_$cps",
+    "_$pam",
+    "_$rds",
+    "_$clt",
+    "_$atm",
+    "_$atm",
+    "_$gdk",
+    "_$gs",
+    "_$gsd",
+    "_$gsp",
+    "_$ms",
+    "_$sdnmd"
+  ],
+  "call_count": 14,
+  "elapsed_ms": 0,
+  "calls": [
+    {
+      "kind": "method",
+      "name": "_$cps",
+      "args": [
+        {
+          "functionId": "unionSearchGoods",
+          "appid": "unionpc",
+          "body": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"
+        }
+      ],
+      "result": [
+        {
+          "key": "appid",
+          "value": "unionpc"
+        },
+        {
+          "key": "body",
+          "value": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"
+        },
+        {
+          "key": "functionId",
+          "value": "unionSearchGoods"
+        }
+      ],
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$pam",
+      "args": [
+        "",
+        ""
+      ],
+      "result": false,
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$rds",
+      "args": [],
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$clt",
+      "args": [
+        1784168130123
+      ],
+      "result": {
+        "type": "string",
+        "length": 660,
+        "sha256": "fccd8406dab806266ca122541603cb058fce377ad1dd1099b3a17e5be8539d54",
+        "head": "of7ruCLjzrkP5rkP5jFTCmIRKCENyipjxjpPFipjLDrg4jYf7fYfzTYf3L4e6rJdJbEjLrJp-jJW3WHWzCVaqiGWJrJdJbYf",
+        "tail": "L-oe1zVRUq5d7zpf6rpWdq5P0ulS9G1WJrJdJnVO4ipjLD7N"
+      },
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "defaultAlgorithm",
+      "name": "local_key_3",
+      "args": [
+        "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYeyzzaj1ibb2pp2pp82026071610153512354586aejid+hR",
+        "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe"
+      ],
+      "result": {
+        "type": "WordArray",
+        "sigBytes": 32,
+        "hex": "7cd25f79047798af4e56fad1c882e871a597374be493d6eef6ffa91e1d036971"
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$atm",
+      "args": [
+        "local_key_3",
+        "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYeyzzaj1ibb2pp2pp82026071610153512354586aejid+hR",
+        "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe"
+      ],
+      "result": "7cd25f79047798af4e56fad1c882e871a597374be493d6eef6ffa91e1d036971",
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "defaultAlgorithm",
+      "name": "local_key_3",
+      "args": [
+        "7cd25f79047798af4e56fad1c882e871a597374be493d6eef6ffa91e1d036971",
+        "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe"
+      ],
+      "result": {
+        "type": "WordArray",
+        "sigBytes": 32,
+        "hex": "a9a8519ad93690346dc90027dca803e622213ca0456719b8686366894f0b4264"
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$atm",
+      "args": [
+        "local_key_3",
+        "7cd25f79047798af4e56fad1c882e871a597374be493d6eef6ffa91e1d036971",
+        "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe"
+      ],
+      "result": "a9a8519ad93690346dc90027dca803e622213ca0456719b8686366894f0b4264",
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$gdk",
+      "args": [
+        "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "yzzaj1ibb2pp2pp8",
+        "2026071610153512354",
+        "586ae"
+      ],
+      "result": "a9a8519ad93690346dc90027dca803e622213ca0456719b8686366894f0b4264",
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$gs",
+      "args": [
+        "a9a8519ad93690346dc90027dca803e622213ca0456719b8686366894f0b4264",
+        [
+          {
+            "key": "appid",
+            "value": "unionpc"
+          },
+          {
+            "key": "body",
+            "value": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"
+          },
+          {
+            "key": "functionId",
+            "value": "unionSearchGoods"
+          }
+        ]
+      ],
+      "result": "04afdd55323fef01294630ece1e61a7983b63c65b99151f9f9a4ac036bff5b7b",
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$gsd",
+      "args": [
+        "a9a8519ad93690346dc90027dca803e622213ca0456719b8686366894f0b4264",
+        [
+          {
+            "key": "appid",
+            "value": "unionpc"
+          },
+          {
+            "key": "body",
+            "value": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"
+          },
+          {
+            "key": "functionId",
+            "value": "unionSearchGoods"
+          }
+        ]
+      ],
+      "result": "eb83cbb6b359b4b0d821a17158a7254a4530c2547ced7e2140ded6d53bc8b6ab",
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$gsp",
+      "args": [
+        "04afdd55323fef01294630ece1e61a7983b63c65b99151f9f9a4ac036bff5b7b",
+        1784168130123,
+        "20260716101535123",
+        {
+          "type": "string",
+          "length": 660,
+          "sha256": "fccd8406dab806266ca122541603cb058fce377ad1dd1099b3a17e5be8539d54",
+          "head": "of7ruCLjzrkP5rkP5jFTCmIRKCENyipjxjpPFipjLDrg4jYf7fYfzTYf3L4e6rJdJbEjLrJp-jJW3WHWzCVaqiGWJrJdJbYf",
+          "tail": "L-oe1zVRUq5d7zpf6rpWdq5P0ulS9G1WJrJdJnVO4ipjLD7N"
+        },
+        "eb83cbb6b359b4b0d821a17158a7254a4530c2547ced7e2140ded6d53bc8b6ab",
+        "of7rHGHQ8GlOIyVOF6ZNHuFT-bVR7qUT"
+      ],
+      "result": {
+        "type": "string",
+        "length": 975,
+        "sha256": "602d7a8c9704261ca3580f615fdd89ab6750433c25ed4f85d292c398fe6a505a",
+        "head": "20260716101535123;yzzaj1ibb2pp2pp8;586ae;tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrb",
+        "tail": "0ded6d53bc8b6ab;of7rHGHQ8GlOIyVOF6ZNHuFT-bVR7qUT"
+      },
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$ms",
+      "args": [
+        [
+          {
+            "key": "appid",
+            "value": "unionpc"
+          },
+          {
+            "key": "body",
+            "value": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"
+          },
+          {
+            "key": "functionId",
+            "value": "unionSearchGoods"
+          }
+        ],
+        {
+          "type": "string",
+          "length": 660,
+          "sha256": "fccd8406dab806266ca122541603cb058fce377ad1dd1099b3a17e5be8539d54",
+          "head": "of7ruCLjzrkP5rkP5jFTCmIRKCENyipjxjpPFipjLDrg4jYf7fYfzTYf3L4e6rJdJbEjLrJp-jJW3WHWzCVaqiGWJrJdJbYf",
+          "tail": "L-oe1zVRUq5d7zpf6rpWdq5P0ulS9G1WJrJdJnVO4ipjLD7N"
+        }
+      ],
+      "result": {
+        "_stk": "appid,body,functionId",
+        "_ste": 1,
+        "h5st": {
+          "type": "string",
+          "length": 975,
+          "sha256": "602d7a8c9704261ca3580f615fdd89ab6750433c25ed4f85d292c398fe6a505a",
+          "head": "20260716101535123;yzzaj1ibb2pp2pp8;586ae;tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrb",
+          "tail": "0ded6d53bc8b6ab;of7rHGHQ8GlOIyVOF6ZNHuFT-bVR7qUT"
+        }
+      },
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    },
+    {
+      "kind": "method",
+      "name": "_$sdnmd",
+      "args": [
+        {
+          "functionId": "unionSearchGoods",
+          "appid": "unionpc",
+          "body": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e"
+        }
+      ],
+      "result": {
+        "functionId": "unionSearchGoods",
+        "appid": "unionpc",
+        "body": "4320c719309c0b8916765224c312f9e6e78e34f86dc87ef56aa75ca902a6665e",
+        "_stk": "appid,body,functionId",
+        "_ste": 1,
+        "h5st": {
+          "type": "string",
+          "length": 975,
+          "sha256": "602d7a8c9704261ca3580f615fdd89ab6750433c25ed4f85d292c398fe6a505a",
+          "head": "20260716101535123;yzzaj1ibb2pp2pp8;586ae;tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrb",
+          "tail": "0ded6d53bc8b6ab;of7rHGHQ8GlOIyVOF6ZNHuFT-bVR7qUT"
+        }
+      },
+      "before": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "",
+        "token": "",
+        "defaultToken": "",
+        "isNormal": false,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      },
+      "after": {
+        "appId": "586ae",
+        "version": "5.3",
+        "fingerprint": "yzzaj1ibb2pp2pp8",
+        "token": "",
+        "defaultToken": "tk06w4530175341lf0L4bECgPYr4pjrd7qEf7qEfJiVR6DVTxCUNrrbrMJV_F-HTRiYbUK4f5LIXYWkdGGIfyTVfHaYe",
+        "isNormal": false,
+        "genKey": null,
+        "defaultAlgorithmKeys": [
+          "local_key_1",
+          "local_key_2",
+          "local_key_3"
+        ],
+        "algoKeys": [
+          "MD5",
+          "SHA256",
+          "HmacSHA256",
+          "HmacMD5"
+        ]
+      }
+    }
+  ],
+  "recovered_pipeline": {
+    "note": "Derived from method hooks on the pinned build; crypto host is still build-specific.",
+    "steps": [
+      "_$cps(params) -> sorted [{key,value}, ...] used as sign body",
+      "_$rds() -> fingerprint (+ token/algo when storage hit)",
+      "_$clt(now_ms) -> part8 env/extension payload",
+      "_$gdk(token, fp, timeExpr, appId) via double _$atm(local_key_3, ...)",
+      "_$gs(key, sortedParams) -> part5",
+      "_$gsd(key, sortedParams) -> part9",
+      "_$gsp(...) joins ten parts; part10 produced inside _$ms before join"
+    ],
+    "crypto": {
+      "seData_segments": 6,
+      "seData_multiplier": 28,
+      "seData_alphabet": "nmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA-_9876543210zyxwvutsrqpo",
+      "eData_salt": "RvI<7|",
+      "local_key_3": "HmacSHA256(message, key) with modified seData/_eData path"
+    }
+  }
+}
